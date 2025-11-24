@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import * as Switch from '@radix-ui/react-switch';
 import { cn } from '../utils/cn';
 import { twMerge } from 'tailwind-merge';
+import { DemoElement } from '../components/DemoElement';
 
 // Tailwind Presets
 const TAILWIND_PRESETS = {
@@ -104,7 +105,7 @@ const InteractiveDemo: React.FC = () => {
     element.setAttribute('data-selected', 'true');
   };
 
-  const modifyClass = (category: string, newClass: string) => {
+  const modifyClass = (_category: string, newClass: string) => {
     if (!selectedElement) return;
 
     const oldClasses = selectedElement.className;
@@ -276,30 +277,14 @@ const InteractiveDemo: React.FC = () => {
           )}
         >
           <div className="bg-white p-12 rounded-lg shadow-sm min-h-full">
-            {demoElements.map(element => {
-              const Tag = element.tag as any;
-              return (
-                <Tag
-                  key={element.id}
-                  id={element.id}
-                  className={cn(
-                    element.className,
-                    "transition-all duration-200 cursor-default",
-                    isDesignMode && "hover:outline hover:outline-2 hover:outline-blue-400 hover:outline-offset-2 cursor-pointer",
-                    "data-[selected=true]:outline data-[selected=true]:outline-2 data-[selected=true]:outline-blue-600 data-[selected=true]:outline-offset-2"
-                  )}
-                  onClick={(e: React.MouseEvent) => {
-                    if (isDesignMode) {
-                      e.preventDefault();
-                      handleElementClick(element.id, e.currentTarget as HTMLElement);
-                    }
-                  }}
-                  data-element={element.id}
-                >
-                  {element.content}
-                </Tag>
-              );
-            })}
+            {demoElements.map(element => (
+              <DemoElement
+                key={element.id}
+                element={element}
+                isDesignMode={isDesignMode}
+                onSelect={(el) => handleElementClick(element.id, el)}
+              />
+            ))}
           </div>
         </div>
 
