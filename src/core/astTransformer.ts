@@ -14,31 +14,21 @@ export function transformSourceCode(
 
 
     // 解析源码为AST
-    // Use transform to get AST since parse might not be exposed directly
-    const parseResult = babelApi.transform(code, {
-      ast: true,
-      code: false,
+    // Use a single transform call to ensure our plugin runs before presets compile JSX
+    const result = babelApi.transform(code, {
+      ast: false, // We don't need the AST output
+      code: true,
       sourceType: 'module',
       filename: id,
       presets: ['typescript', 'react'],
-
+      plugins: [
+        createSourceMappingPlugin(id, options)
+      ],
       parserOpts: {
         allowImportExportEverywhere: true,
         allowReturnOutsideFunction: true,
         createParenthesizedExpressions: true
       }
-    });
-
-    const ast = parseResult.ast;
-
-    // 创建转换插件
-    const plugin = createSourceMappingPlugin(id, options);
-
-    // 转换AST
-    const result = babelApi.transformFromAst(ast, code, {
-      plugins: [plugin],
-      sourceMaps: true,
-      filename: id
     });
 
     return (result && result.code) || code;
