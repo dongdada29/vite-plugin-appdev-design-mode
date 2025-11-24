@@ -1,9 +1,8 @@
-import React, { useState, useRef } from 'react';
-
+import React, { useState, useEffect } from 'react';
 import * as Switch from '@radix-ui/react-switch';
 import { cn } from '../utils/cn';
-import { twMerge } from 'tailwind-merge';
 import { DemoElement } from '../components/DemoElement';
+import { useDesignMode } from '../context/DesignModeContext';
 
 // Tailwind Presets
 const TAILWIND_PRESETS = {
@@ -49,20 +48,26 @@ const TAILWIND_PRESETS = {
 };
 
 const InteractiveDemo: React.FC = () => {
-  const [isDesignMode, setIsDesignMode] = useState(false);
-  const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(null);
+  const {
+    isDesignMode,
+    toggleDesignMode,
+    selectedElement,
+    selectElement,
+    modifications,
+    modifyElementClass,
+    resetModifications
+  } = useDesignMode();
+
   // We need to track the current classes for the selected element to show the correct state
   const [currentClasses, setCurrentClasses] = useState<string>('');
 
-  const [modifications, setModifications] = useState<Array<{
-    id: string;
-    element: string;
-    type: 'class';
-    oldValue: string;
-    newValue: string;
-    timestamp: number;
-  }>>([]);
-  const previewRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedElement) {
+      setCurrentClasses(selectedElement.className);
+    } else {
+      setCurrentClasses('');
+    }
+  }, [selectedElement, modifications]); // Update when selection or modifications change
 
   const demoElements = [
     {
@@ -93,65 +98,24 @@ const InteractiveDemo: React.FC = () => {
 
   const handleElementClick = (elementId: string, element: HTMLElement) => {
     if (!isDesignMode) return;
-
-    setSelectedElement(element);
-    setCurrentClasses(element.className);
-
-    // Remove selection from other elements
-    previewRef.current?.querySelectorAll('[data-selected="true"]').forEach(el => {
-      if (el !== element) el.removeAttribute('data-selected');
-    });
-
-    element.setAttribute('data-selected', 'true');
+    selectElement(element);
   };
 
   const modifyClass = (_category: string, newClass: string) => {
     if (!selectedElement) return;
-
-    const oldClasses = selectedElement.className;
-    // Use tailwind-merge to intelligently merge classes (handling conflicts)
-    // We append the new class, and twMerge resolves conflicts (e.g., p-4 overrides p-2)
-    const mergedClasses = twMerge(oldClasses, newClass);
-
-    selectedElement.className = mergedClasses;
-    setCurrentClasses(mergedClasses);
-
-    const modification = {
-      id: Date.now().toString(),
-      element: selectedElement.id || 'unknown',
-      type: 'class' as const,
-      oldValue: oldClasses, // Storing full class string might be verbose, but accurate
-      newValue: mergedClasses,
-      timestamp: Date.now()
-    };
-
-    setModifications(prev => [modification, ...prev]);
-  };
-
-  const resetModifications = () => {
-    // This is a simplified reset. In a real app, we'd need to track initial state more robustly.
-    // Here we just reload the page or we could store initial classes in a map.
-    // For this demo, let's just clear the modifications list and maybe warn the user.
-    // A better approach for this specific demo structure:
-    // Since we are modifying the DOM directly, we can't easily "undo" without storing history.
-    // But we can just re-render the list if we were driving from state.
-    // Since we are doing direct DOM manipulation for the "Design Mode" feel:
-    window.location.reload();
+    modifyElementClass(selectedElement, newClass);
   };
 
   return (
     <div className="flex flex-col gap-8" data-page="interactive">
-      <header className="flex flex-col gap-6 bg-slate-50 p-8 rounded-xl border border-slate-200">
+      <header className="flex flex-col gap-6 bg-slate-50 p-8 rounded-xl border border-slate-200" data-design-mode-ui>
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-slate-900">Interactive Design Mode</h1>
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-slate-700">Design Mode</label>
             <Switch.Root
               checked={isDesignMode}
-              onCheckedChange={(checked) => {
-                setIsDesignMode(checked);
-                if (!checked) setSelectedElement(null);
-              }}
+              onCheckedChange={toggleDesignMode}
               className={cn(
                 "w-[42px] h-[25px] bg-slate-200 rounded-full relative shadow-inner focus:shadow-black transition-colors data-[state=checked]:bg-blue-600 cursor-pointer",
                 "focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -166,7 +130,7 @@ const InteractiveDemo: React.FC = () => {
           <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-4">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              Editing: <code className="bg-slate-100 px-2 py-0.5 rounded text-sm">{selectedElement.id}</code>
+              Editing: <code className="bg-slate-100 px-2 py-0.5 rounded text-sm">{selectedElement.id || selectedElement.tagName.toLowerCase()}</code>
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -270,7 +234,6 @@ const InteractiveDemo: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 min-h-[600px]">
         <div
-          ref={previewRef}
           className={cn(
             "bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-8 relative transition-all duration-300",
             isDesignMode && "border-blue-400 bg-blue-50/30"
@@ -288,7 +251,7 @@ const InteractiveDemo: React.FC = () => {
           </div>
         </div>
 
-        <aside className="bg-slate-50 border border-slate-200 rounded-xl flex flex-col overflow-hidden h-fit sticky top-24">
+        <aside className="bg-slate-50 border border-slate-200 rounded-xl flex flex-col overflow-hidden h-fit sticky top-24" data-design-mode-ui>
           <div className="p-4 bg-slate-100 border-b border-slate-200 flex justify-between items-center">
             <h3 className="font-semibold text-slate-900">Modifications</h3>
             <button

@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
+import { DesignModeProvider } from './context/DesignModeContext';
+import { DesignModeManager } from './components/DesignModeManager';
 
 // 开发模式下的额外日志
 if (import.meta.env.DEV) {
@@ -52,10 +54,13 @@ class ErrorBoundary extends React.Component<
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </ErrorBoundary>
+    <DesignModeProvider>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <DesignModeManager />
+          <App />
+        </BrowserRouter>
+      </ErrorBoundary>
+    </DesignModeProvider>
   </React.StrictMode>
 );
