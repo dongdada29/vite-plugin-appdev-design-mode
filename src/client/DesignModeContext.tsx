@@ -45,9 +45,6 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     element.className = mergedClasses;
 
-    // Update selected element reference if it's the one being modified
-    // (though usually we pass the selectedElement itself)
-
     const modification: Modification = {
       id: Date.now().toString(),
       element: element.id || 'unknown',
@@ -61,7 +58,6 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const resetModifications = useCallback(() => {
-    // Simple reload for now as per previous implementation
     window.location.reload();
   }, []);
 

@@ -36,6 +36,9 @@ export default defineConfig({
     host: true,
     open: true,
     cors: true,
+    fs: {
+      allow: ['..', '../../src'], // Allow serving the plugin source
+    },
   },
 
   build: {

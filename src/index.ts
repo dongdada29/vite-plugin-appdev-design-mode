@@ -47,6 +47,12 @@ const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
   include: ['**/*.{js,jsx,ts,tsx}'],
 };
 
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
 
@@ -87,6 +93,26 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         '/__appdev_design_mode',
         createServerMiddleware(options, server.config.root)
       );
+    },
+
+    transformIndexHtml(html) {
+      if (!options.enabled) return html;
+
+      const clientEntryPath = resolve(__dirname, 'client/index.tsx');
+
+      return {
+        html,
+        tags: [
+          {
+            tag: 'script',
+            attrs: {
+              type: 'module',
+              src: `/@fs${clientEntryPath}`,
+            },
+            injectTo: 'body',
+          },
+        ],
+      };
     },
 
     transform(code, id, transformOptions) {
