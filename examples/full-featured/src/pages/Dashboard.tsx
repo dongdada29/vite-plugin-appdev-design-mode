@@ -23,7 +23,7 @@ import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { useDesignTokens, useColors, useTypography, useSpacing, useEvents } from '../store/design-system-store';
 
-// 统计卡片组件
+// 简化统计卡片组件
 interface StatsCardProps {
   title: string;
   value: string | number;
@@ -286,28 +286,28 @@ const Dashboard: React.FC = () => {
           <StatsCard
             title="Total Tokens"
             value={stats.totalTokens}
-            icon={<Palette className="w-6 h-6" />}
+            icon={<span className="text-2xl">🎨</span>}
             trend={{ value: 12, label: 'from last month' }}
             color="primary"
           />
           <StatsCard
             title="Design Score"
             value={`${stats.designScore}%`}
-            icon={<CheckCircle className="w-6 h-6" />}
+            icon={<span className="text-2xl">✅</span>}
             trend={{ value: 5, label: 'improvement' }}
             color="success"
           />
           <StatsCard
             title="Components"
             value={stats.totalComponents}
-            icon={<Layout className="w-6 h-6" />}
+            icon={<span className="text-2xl">🧩</span>}
             trend={{ value: 8, label: 'new this month' }}
             color="secondary"
           />
           <StatsCard
             title="Libraries"
             value={stats.totalLibraries}
-            icon={<Type className="w-6 h-6" />}
+            icon={<span className="text-2xl">📚</span>}
             color="warning"
           />
         </CardGroup>
