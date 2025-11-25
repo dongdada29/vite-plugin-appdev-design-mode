@@ -40,7 +40,7 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setSelectedElement(element);
   }, []);
 
-  const updateSource = useCallback(async (element: HTMLElement, newValue: string, type: 'style' | 'content') => {
+  const updateSource = useCallback(async (element: HTMLElement, newValue: string, type: 'style' | 'content', originalValue?: string) => {
     // Try to get source info from data-source-info JSON attribute first
     const sourceInfoStr = element.getAttribute('data-source-info');
     let filePath: string | null = null;
@@ -84,6 +84,7 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           column,
           newValue,
           type,
+          originalValue, // Include original value for matching
         }),
       });
 
@@ -119,11 +120,16 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [updateSource]);
 
   const updateElementContent = useCallback((element: HTMLElement, newContent: string) => {
+    // IMPORTANT: Get original content BEFORE updating DOM
+    const originalContent = element.innerText;
+
+    console.log('[DesignMode] Updating content:', { original: originalContent, new: newContent });
+
     // Update DOM immediately for feedback
     element.innerText = newContent;
 
-    // Call API to persist changes
-    updateSource(element, newContent, 'content');
+    // Call API to persist changes with original value for matching
+    updateSource(element, newContent, 'content', originalContent);
   }, [updateSource]);
 
   const resetModifications = useCallback(() => {

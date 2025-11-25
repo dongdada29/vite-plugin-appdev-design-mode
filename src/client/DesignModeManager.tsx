@@ -33,12 +33,13 @@ export const DesignModeManager: React.FC = () => {
       e.stopPropagation();
 
       const target = e.target as HTMLElement;
+
+      // IMPORTANT: Save original content BEFORE enabling editing
+      const originalContent = target.innerText;
+
       // Enable content editing
       target.contentEditable = 'true';
       target.focus();
-
-      // Save original content to restore if cancelled?
-      // For now, just simple edit.
 
       const cleanup = () => {
         target.contentEditable = 'false';
@@ -48,7 +49,51 @@ export const DesignModeManager: React.FC = () => {
 
       const handleBlur = () => {
         cleanup();
-        updateElementContent(target, target.innerText);
+        // Use the saved original content, not current innerText
+        const newContent = target.innerText;
+        if (newContent !== originalContent) {
+          // Create a custom version of updateElementContent that uses our saved original
+          const sourceInfoStr = target.getAttribute('data-source-info');
+          let filePath: string | null = null;
+          let line: number | null = null;
+          let column: number | null = null;
+
+          if (sourceInfoStr) {
+            try {
+              const sourceInfo = JSON.parse(sourceInfoStr);
+              filePath = sourceInfo.fileName;
+              line = sourceInfo.lineNumber;
+              column = sourceInfo.columnNumber;
+            } catch (e) {
+              console.warn('Failed to parse data-source-info:', e);
+            }
+          }
+
+          if (filePath && line !== null && column !== null) {
+            fetch('/__appdev_design_mode/update', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                filePath,
+                line,
+                column,
+                newValue: newContent,
+                type: 'content',
+                originalValue: originalContent,
+              }),
+            }).then(response => {
+              if (response.ok) {
+                console.log('[DesignMode] Content updated successfully');
+              } else {
+                console.error('[DesignMode] Failed to update content');
+              }
+            }).catch(error => {
+              console.error('[DesignMode] Error updating content:', error);
+            });
+          }
+        }
       };
 
       const handleKeyDown = (e: KeyboardEvent) => {
