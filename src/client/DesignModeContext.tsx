@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 export interface Modification {
@@ -27,6 +27,29 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isDesignMode, setIsDesignMode] = useState(false);
   const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(null);
   const [modifications, setModifications] = useState<Modification[]>([]);
+
+  // Listen for external toggle commands (for iframe scenario)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'TOGGLE_DESIGN_MODE') {
+        const newState = event.data.enabled;
+        setIsDesignMode(newState);
+
+        // Notify parent that design mode state changed
+        if (window.self !== window.top) {
+          window.parent.postMessage({
+            type: 'DESIGN_MODE_CHANGED',
+            enabled: newState
+          }, '*');
+        }
+
+        console.log('[DesignMode] External toggle:', newState);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const toggleDesignMode = useCallback(() => {
     setIsDesignMode(prev => {

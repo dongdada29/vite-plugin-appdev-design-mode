@@ -38,18 +38,35 @@ export async function handleUpdate(req: IncomingMessage, res: ServerResponse, ro
     let sourceCode = fs.readFileSync(absolutePath, 'utf-8');
     let updated = false;
 
-    if (type === 'content' && originalValue) {
-      // 使用原始值进行精确匹配和替换
-      // 转义特殊字符
-      const escapedOriginal = originalValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(>\\s*)${escapedOriginal}(\\s*<)`, 'g');
+    if (type === 'content') {
+      if (originalValue && originalValue !== newValue) {
+        // Try to match with original value first
+        const escapedOriginal = originalValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(>\\s*)${escapedOriginal}(\\s*<)`, 'g');
 
-      const newSourceCode = sourceCode.replace(regex, `$1${newValue}$2`);
+        const newSourceCode = sourceCode.replace(regex, `$1${newValue}$2`);
 
-      if (newSourceCode !== sourceCode) {
-        fs.writeFileSync(absolutePath, newSourceCode, 'utf-8');
+        if (newSourceCode !== sourceCode) {
+          fs.writeFileSync(absolutePath, newSourceCode, 'utf-8');
+          updated = true;
+          console.log(`[appdev-design-mode] Updated ${path.relative(root, absolutePath)}`);
+        } else {
+          // Fallback: If original value not found, try to find any similar content
+          // This handles cases where the file was already updated by HMR
+          console.warn('[appdev-design-mode] Original value not found, trying fallback match');
+
+          // Try to find the new value in the file (maybe it's already there)
+          if (sourceCode.includes(newValue)) {
+            console.log('[appdev-design-mode] Content already exists in file, no update needed');
+            updated = true; // Consider it successful since the desired state is already there
+          }
+        }
+      } else if (originalValue === newValue) {
+        // No change needed
+        console.log('[appdev-design-mode] No change needed (original === new)');
         updated = true;
-        console.log(`[appdev-design-mode] Updated ${path.relative(root, absolutePath)}`);
+      } else {
+        console.warn('[appdev-design-mode] Missing originalValue for content update');
       }
     } else if (type === 'style') {
       // TODO: 实现样式更新
