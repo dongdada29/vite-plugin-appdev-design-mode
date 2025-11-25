@@ -15,9 +15,9 @@
 ## Installation
 
 ```bash
-npm install vite-plugin-appdev-design-mode --save-dev
+npm install @xagi/vite-plugin-design-mode --save-dev
 # or
-yarn add vite-plugin-appdev-design-mode --dev
+yarn add @xagi/vite-plugin-design-mode --dev
 ```
 
 ## Basic Usage
@@ -26,7 +26,7 @@ yarn add vite-plugin-appdev-design-mode --dev
 // vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import appdevDesignMode from 'vite-plugin-appdev-design-mode';
+import appdevDesignMode from '@xagi/vite-plugin-design-mode';
 
 export default defineConfig({
   plugins: [
@@ -42,7 +42,7 @@ export default defineConfig({
 // vite.config.ts
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import appdevDesignMode from 'vite-plugin-appdev-design-mode';
+import appdevDesignMode from '@xagi/vite-plugin-design-mode';
 
 export default defineConfig({
   plugins: [
@@ -282,7 +282,7 @@ curl http://localhost:3000/__appdev_design_mode/health
 ```bash
 # 克隆项目
 git clone <repository-url>
-cd vite-plugin-appdev-design-mode
+cd vite-plugin-design-mode
 
 # 安装依赖
 npm install

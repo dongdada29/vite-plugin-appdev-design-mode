@@ -58,7 +58,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
 
   return {
-    name: 'vite-plugin-appdev-design-mode',
+    name: '@xagi/vite-plugin-design-mode',
     enforce: 'pre',
 
     config(config, { command }) {
@@ -89,16 +89,20 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         return;
       }
 
-      // 添加开发服务器中间件
+      // Register update middleware first (more specific path)
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/__appdev_design_mode/update') {
+          handleUpdate(req, res, server.config.root);
+        } else {
+          next();
+        }
+      });
+
+      // Then register the base middleware
       server.middlewares.use(
         '/__appdev_design_mode',
         createServerMiddleware(options, server.config.root)
       );
-
-      // Register update middleware
-      server.middlewares.use('/__appdev_design_mode/update', (req, res) => {
-        handleUpdate(req, res, server.config.root);
-      });
     },
 
     transformIndexHtml(html) {

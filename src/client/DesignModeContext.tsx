@@ -41,11 +41,33 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const updateSource = useCallback(async (element: HTMLElement, newValue: string, type: 'style' | 'content') => {
-    const filePath = element.getAttribute('data-source-file');
-    const line = element.getAttribute('data-source-line');
-    const column = element.getAttribute('data-source-column');
+    // Try to get source info from data-source-info JSON attribute first
+    const sourceInfoStr = element.getAttribute('data-source-info');
+    let filePath: string | null = null;
+    let line: number | null = null;
+    let column: number | null = null;
 
-    if (!filePath || !line || !column) {
+    if (sourceInfoStr) {
+      try {
+        const sourceInfo = JSON.parse(sourceInfoStr);
+        filePath = sourceInfo.fileName;
+        line = sourceInfo.lineNumber;
+        column = sourceInfo.columnNumber;
+      } catch (e) {
+        console.warn('Failed to parse data-source-info:', e);
+      }
+    }
+
+    // Fallback to individual attributes
+    if (!filePath) {
+      filePath = element.getAttribute('data-source-file');
+      const lineStr = element.getAttribute('data-source-line');
+      const columnStr = element.getAttribute('data-source-column');
+      line = lineStr ? parseInt(lineStr, 10) : null;
+      column = columnStr ? parseInt(columnStr, 10) : null;
+    }
+
+    if (!filePath || line === null || column === null) {
       console.warn('Element does not have source mapping data', element);
       return;
     }
@@ -58,8 +80,8 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         },
         body: JSON.stringify({
           filePath,
-          line: parseInt(line, 10),
-          column: parseInt(column, 10),
+          line,
+          column,
           newValue,
           type,
         }),

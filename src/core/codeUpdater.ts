@@ -2,7 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { IncomingMessage, ServerResponse } from 'http';
 import * as babelApi from '@babel/standalone';
-import traverse from '@babel/traverse';
+// @ts-ignore - Handle both ESM and CommonJS exports
+import traverseModule from '@babel/traverse';
+const traverse = (traverseModule as any).default || traverseModule;
 
 export interface UpdateRequest {
   filePath: string;
@@ -24,10 +26,13 @@ export async function handleUpdate(req: IncomingMessage, res: ServerResponse, ro
     const data = JSON.parse(body) as UpdateRequest;
     const { filePath, line, column, newValue, type } = data;
 
+    console.log('[appdev-design-mode] Update request:', { filePath, line, column, type, newValue: newValue.substring(0, 50) });
+
     // Resolve absolute path
     const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(root, filePath);
 
     if (!fs.existsSync(absolutePath)) {
+      console.error('[appdev-design-mode] File not found:', absolutePath);
       res.statusCode = 404;
       res.end('File not found');
       return;
@@ -37,6 +42,7 @@ export async function handleUpdate(req: IncomingMessage, res: ServerResponse, ro
     const newSourceCode = updateSourceCode(sourceCode, line, column, newValue, type);
 
     if (newSourceCode === sourceCode) {
+      console.error('[appdev-design-mode] Could not locate element at', { line, column, type });
       res.statusCode = 400;
       res.end(JSON.stringify({ success: false, message: 'Could not locate element to update' }));
       return;
