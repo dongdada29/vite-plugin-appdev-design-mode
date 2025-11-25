@@ -6,7 +6,7 @@ export default function HomePage() {
       {/* 主标题区域 */}
       <div className="text-center mb-16">
         <h1 className="text-5xl font-bold text-gray-900 mb-4">
-          欢迎使用设计模式
+          欢迎使用设计模式12
         </h1>
         <p className="text-xl text-gray-600 max-w-3xl mx-auto">
           体验实时可视化编辑，自动更新源代码。
@@ -55,7 +55,7 @@ export default function HomePage() {
 
       {/* 演示区域 */}
       <div className="bg-white rounded-xl shadow-xl p-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">立即体验</h2>
+        <h2 className="text-3xl font-bold text-gray-900 mb-6">立即体验22232</h2>
         <div className="space-y-4">
           <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
             <h3 className="text-xl font-semibold text-blue-900 mb-2">可编辑卡片</h3>
@@ -74,7 +74,7 @@ export default function HomePage() {
           <div className="p-6 bg-purple-50 rounded-lg border-2 border-purple-200">
             <h3 className="text-xl font-semibold text-purple-900 mb-2">第三个卡片</h3>
             <p className="text-purple-700">
-              双击这段文字可以直接编辑！3434341212
+              双击这段文字可以直接编辑！3434341212121212
             </p>
           </div>
         </div>

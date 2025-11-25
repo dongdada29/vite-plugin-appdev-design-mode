@@ -41,7 +41,7 @@ export default function FeaturesPage() {
             <p className="text-gray-600">双击即可编辑这段文字。</p>
           </div>
           <div className="p-4 bg-blue-50 rounded-md">
-            <p className="text-blue-900">试着编辑这段文本！</p>
+            <p className="text-blue-900">试着编辑这段文本！11</p>
           </div>
         </div>
       </section>

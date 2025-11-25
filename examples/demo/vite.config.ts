@@ -18,4 +18,9 @@ export default defineConfig({
       allow: ['..', '../../src'],
     },
   },
+  resolve: {
+    alias: {
+      '@': '/Users/a1234/www/vite-plugin-appdev-design-mode/src',
+    },
+  },
 });

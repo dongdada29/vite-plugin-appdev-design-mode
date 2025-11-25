@@ -2,6 +2,7 @@ import type { Plugin } from 'vite';
 import { createServerMiddleware } from './core/serverMiddleware';
 import { transformSourceCode } from './core/astTransformer';
 import { handleUpdate } from './core/codeUpdater';
+import { handleBatchUpdate } from './core/batchUpdater';
 
 export interface DesignModeOptions {
   /**
@@ -90,9 +91,12 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       }
 
       // Register update middleware first (more specific path)
+      // Register update middleware first (more specific path)
       server.middlewares.use((req, res, next) => {
         if (req.url === '/__appdev_design_mode/update') {
           handleUpdate(req, res, server.config.root);
+        } else if (req.url === '/__appdev_design_mode/batch-update') {
+          handleBatchUpdate(req, res, server.config.root);
         } else {
           next();
         }
