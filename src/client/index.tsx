@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { DesignModeProvider } from './DesignModeContext';
 import { DesignModeManager } from './DesignModeManager';
 import { DesignModeUI } from './DesignModeUI';
+import { DesignModeBridge } from './DesignModeBridge';
 
 const init = () => {
   const containerId = '__vite_plugin_design_mode__';
@@ -21,11 +22,20 @@ const init = () => {
     <React.StrictMode>
       <DesignModeProvider>
         <DesignModeManager />
-        <DesignModeUI />
+        <DesignModeBridge />
+        {!isInIframe() && <DesignModeUI />}
       </DesignModeProvider>
     </React.StrictMode>
   );
 };
+
+function isInIframe() {
+  try {
+    return window.self !== window.top;
+  } catch (e) {
+    return true;
+  }
+}
 
 if (typeof window !== 'undefined') {
   init();

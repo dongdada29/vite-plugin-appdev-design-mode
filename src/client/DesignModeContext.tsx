@@ -17,6 +17,7 @@ interface DesignModeContextType {
   selectElement: (element: HTMLElement | null) => void;
   modifications: Modification[];
   modifyElementClass: (element: HTMLElement, newClass: string) => void;
+  updateElementContent: (element: HTMLElement, newContent: string) => void;
   resetModifications: () => void;
 }
 
@@ -39,11 +40,49 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setSelectedElement(element);
   }, []);
 
+  const updateSource = useCallback(async (element: HTMLElement, newValue: string, type: 'style' | 'content') => {
+    const filePath = element.getAttribute('data-source-file');
+    const line = element.getAttribute('data-source-line');
+    const column = element.getAttribute('data-source-column');
+
+    if (!filePath || !line || !column) {
+      console.warn('Element does not have source mapping data', element);
+      return;
+    }
+
+    try {
+      const response = await fetch('/__appdev_design_mode/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filePath,
+          line: parseInt(line, 10),
+          column: parseInt(column, 10),
+          newValue,
+          type,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update source');
+      }
+
+      console.log(`[DesignMode] Updated ${type} for ${filePath}:${line}`);
+    } catch (error) {
+      console.error('[DesignMode] Error updating source:', error);
+    }
+  }, []);
+
   const modifyElementClass = useCallback((element: HTMLElement, newClass: string) => {
     const oldClasses = element.className;
     const mergedClasses = twMerge(oldClasses, newClass);
 
     element.className = mergedClasses;
+
+    // Call API to persist changes
+    updateSource(element, mergedClasses, 'style');
 
     const modification: Modification = {
       id: Date.now().toString(),
@@ -55,7 +94,15 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
 
     setModifications(prev => [modification, ...prev]);
-  }, []);
+  }, [updateSource]);
+
+  const updateElementContent = useCallback((element: HTMLElement, newContent: string) => {
+    // Update DOM immediately for feedback
+    element.innerText = newContent;
+
+    // Call API to persist changes
+    updateSource(element, newContent, 'content');
+  }, [updateSource]);
 
   const resetModifications = useCallback(() => {
     window.location.reload();
@@ -69,6 +116,7 @@ export const DesignModeProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       selectElement,
       modifications,
       modifyElementClass,
+      updateElementContent,
       resetModifications
     }}>
       {children}

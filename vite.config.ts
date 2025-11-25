@@ -9,7 +9,16 @@ export default defineConfig({
       fileName: (format) => `index.${format}.js`
     },
     rollupOptions: {
-      external: ['vite', '@babel/core', '@babel/traverse', '@babel/types'],
+      external: [
+        'vite', 
+        '@babel/core', 
+        '@babel/traverse', 
+        '@babel/types',
+        'url',
+        'path',
+        'fs',
+        'http'
+      ],
       output: {
         globals: {
           vite: 'vite',

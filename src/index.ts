@@ -1,6 +1,7 @@
 import type { Plugin } from 'vite';
 import { createServerMiddleware } from './core/serverMiddleware';
 import { transformSourceCode } from './core/astTransformer';
+import { handleUpdate } from './core/codeUpdater';
 
 export interface DesignModeOptions {
   /**
@@ -93,6 +94,11 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         '/__appdev_design_mode',
         createServerMiddleware(options, server.config.root)
       );
+
+      // Register update middleware
+      server.middlewares.use('/__appdev_design_mode/update', (req, res) => {
+        handleUpdate(req, res, server.config.root);
+      });
     },
 
     transformIndexHtml(html) {

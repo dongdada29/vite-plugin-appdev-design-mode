@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useDesignMode } from './DesignModeContext';
 
 export const DesignModeManager: React.FC = () => {
-  const { isDesignMode, selectElement, selectedElement } = useDesignMode();
+  const { isDesignMode, selectElement, selectedElement, updateElementContent } = useDesignMode();
 
   useEffect(() => {
     if (!isDesignMode) {
@@ -26,6 +26,47 @@ export const DesignModeManager: React.FC = () => {
       selectElement(target);
     };
 
+    const handleDoubleClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const target = e.target as HTMLElement;
+      // Enable content editing
+      target.contentEditable = 'true';
+      target.focus();
+
+      // Save original content to restore if cancelled?
+      // For now, just simple edit.
+
+      const cleanup = () => {
+        target.contentEditable = 'false';
+        target.removeEventListener('blur', handleBlur);
+        target.removeEventListener('keydown', handleKeyDown);
+      };
+
+      const handleBlur = () => {
+        cleanup();
+        updateElementContent(target, target.innerText);
+      };
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          target.blur(); // Will trigger handleBlur
+        }
+        if (e.key === 'Escape') {
+          // Cancel?
+          // For now, just blur.
+          target.blur();
+        }
+      };
+
+      target.addEventListener('blur', handleBlur);
+      target.addEventListener('keydown', handleKeyDown);
+    };
+
     const handleMouseOver = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
 
@@ -39,6 +80,7 @@ export const DesignModeManager: React.FC = () => {
     };
 
     document.addEventListener('click', handleClick, true);
+    document.addEventListener('dblclick', handleDoubleClick, true);
     document.addEventListener('mouseover', handleMouseOver);
     document.addEventListener('mouseout', handleMouseOut);
 
@@ -57,6 +99,11 @@ export const DesignModeManager: React.FC = () => {
           outline: 2px solid #2563eb !important; /* blue-600 */
           outline-offset: 2px;
         }
+        [contenteditable="true"] {
+          outline: 2px solid #22c55e !important; /* green-500 */
+          cursor: text;
+          background-color: rgba(34, 197, 94, 0.1);
+        }
       `;
       document.head.appendChild(style);
     }
@@ -73,6 +120,7 @@ export const DesignModeManager: React.FC = () => {
       }
 
       document.removeEventListener('click', handleClick, true);
+      document.removeEventListener('dblclick', handleDoubleClick, true);
       document.removeEventListener('mouseover', handleMouseOver);
       document.removeEventListener('mouseout', handleMouseOut);
 
@@ -80,7 +128,7 @@ export const DesignModeManager: React.FC = () => {
         el.removeAttribute('data-design-hover');
       });
     };
-  }, [isDesignMode, selectElement]);
+  }, [isDesignMode, selectElement, updateElementContent]);
 
   useEffect(() => {
     document.querySelectorAll('[data-design-selected]').forEach(el => {
