@@ -1,0 +1,388 @@
+/**
+ * @fileoverview 全局样式文件
+ * @description 包含 TailwindCSS 导入、基础样式重置和应用级样式
+ */
+
+/* TailwindCSS 基础导入 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义 CSS 变量 */
+:root {
+  /* 颜色变量 */
+  --color-primary-50: #eff6ff;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  
+  --color-secondary-50: #faf5ff;
+  --color-secondary-500: #a855f7;
+  --color-secondary-600: #9333ea;
+  
+  /* 字体变量 */
+  --font-family-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: 'JetBrains Mono', ui-monospace, monospace;
+  
+  /* 阴影变量 */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  
+  /* 圆角变量 */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+/* 暗色主题变量 */
+.dark {
+  --color-bg-primary: #0a0a0a;
+  --color-bg-secondary: #171717;
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a3a3a3;
+}
+
+/* 基础样式重置 */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-family-sans);
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: #fafafa;
+  color: #171717;
+  overflow-x: hidden;
+}
+
+/* 应用容器样式 */
+.app {
+  min-height: 100vh;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.app.design-mode-enabled {
+  cursor: crosshair;
+}
+
+/* 页面容器 */
+.page-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+.page-header {
+  @apply mb-8;
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 1.5rem;
+}
+
+.page-content {
+  @apply w-full;
+}
+
+/* 布局组件样式 */
+.layout-container {
+  @apply min-h-screen flex flex-col;
+}
+
+.layout-sidebar {
+  @apply w-64 bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800;
+  transition: width 0.3s ease;
+}
+
+.layout-main {
+  @apply flex-1 flex flex-col overflow-hidden;
+}
+
+.layout-header {
+  @apply h-16 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center px-6;
+}
+
+.layout-content {
+  @apply flex-1 overflow-auto bg-neutral-50 dark:bg-neutral-800;
+}
+
+/* 组件高亮样式 */
+.component-highlight {
+  @apply transition-all duration-200 ease-in-out;
+  position: relative;
+}
+
+.component-highlight:hover {
+  @apply bg-primary-50 dark:bg-primary-900/20;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* 设计模式样式 */
+[data-design-mode="true"] {
+  transition: all 0.2s ease;
+}
+
+[data-design-mode="true"]:hover {
+  @apply bg-primary-50 border-primary-200;
+  outline: 2px solid theme('colors.primary.500');
+  outline-offset: 2px;
+}
+
+[data-design-mode-active="true"] {
+  @apply bg-error-50 border-error-200;
+  outline: 3px solid theme('colors.error.500');
+  outline-offset: 2px;
+  animation: pulse-error 1s ease-in-out;
+}
+
+[data-design-mode-hover="true"] {
+  @apply bg-warning-50 border-warning-200;
+  outline: 2px solid theme('colors.warning.500');
+  outline-offset: 2px;
+}
+
+@keyframes pulse-error {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* 表单组件样式 */
+.form-group {
+  @apply space-y-2;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-neutral-700 dark:text-neutral-300;
+}
+
+.form-input {
+  @apply w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md shadow-sm;
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+  @apply dark:bg-neutral-700 dark:text-neutral-100;
+}
+
+.form-input:invalid {
+  @apply border-error-300 focus:ring-error-500 focus:border-error-500;
+}
+
+/* 按钮组件样式 */
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 border font-medium rounded-md;
+  @apply transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-primary {
+  @apply btn bg-primary-600 border-primary-600 text-white;
+  @apply hover:bg-primary-700 hover:border-primary-700 focus:ring-primary-500;
+}
+
+.btn-secondary {
+  @apply btn bg-neutral-200 border-neutral-300 text-neutral-900;
+  @apply hover:bg-neutral-300 hover:border-neutral-400 focus:ring-neutral-500;
+  @apply dark:bg-neutral-700 dark:border-neutral-600 dark:text-neutral-100;
+  @apply dark:hover:bg-neutral-600 dark:hover:border-neutral-500;
+}
+
+.btn-outline {
+  @apply btn border-primary-600 text-primary-600 bg-transparent;
+  @apply hover:bg-primary-600 hover:text-white focus:ring-primary-500;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-sm;
+}
+
+.btn-lg {
+  @apply px-6 py-3 text-lg;
+}
+
+/* 卡片组件样式 */
+.card {
+  @apply bg-white dark:bg-neutral-900 rounded-lg shadow border border-neutral-200 dark:border-neutral-800;
+  @apply transition-shadow duration-200;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.card-header {
+  @apply px-6 py-4 border-b border-neutral-200 dark:border-neutral-800;
+}
+
+.card-body {
+  @apply px-6 py-4;
+}
+
+.card-footer {
+  @apply px-6 py-4 border-t border-neutral-200 dark:border-neutral-800;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  @apply bg-white dark:bg-neutral-900 rounded-lg shadow-xl max-w-md w-full mx-4;
+  @apply animate-in fade-in duration-200;
+}
+
+/* 工具提示样式 */
+.tooltip {
+  @apply absolute z-50 px-2 py-1 text-xs text-white bg-neutral-900 rounded shadow-lg;
+  @apply pointer-events-none opacity-0 transition-opacity duration-200;
+}
+
+.tooltip.show {
+  @apply opacity-100;
+}
+
+/* 加载状态样式 */
+.loading-spinner {
+  @apply inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-dots {
+  @apply flex space-x-1;
+}
+
+.loading-dots > div {
+  @apply w-2 h-2 bg-current rounded-full;
+  animation: loading-dots 1.4s ease-in-out infinite both;
+}
+
+.loading-dots > div:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots > div:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes loading-dots {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* 响应式设计增强 */
+@media (max-width: 768px) {
+  .layout-sidebar {
+    @apply fixed inset-y-0 left-0 z-40 transform -translate-x-full;
+    transition: transform 0.3s ease;
+  }
+  
+  .layout-sidebar.open {
+    @apply translate-x-0;
+  }
+  
+  .page-container {
+    @apply px-4;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+}
+
+/* 无障碍支持 */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  clip: rect(0, 0, 0, 0);
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  .card {
+    @apply border-2;
+  }
+  
+  .btn {
+    @apply border-2;
+  }
+}
+
+/* 减少动画支持 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 打印样式 */
+@media print {
+  .layout-sidebar,
+  .layout-header {
+    @apply hidden;
+  }
+  
+  .layout-content {
+    @apply ml-0;
+  }
+  
+  .page-container {
+    @apply max-w-none px-0;
+  }
+}
+
+/* 自定义滚动条 */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.neutral.400') theme('colors.neutral.100');
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: theme('colors.neutral.100');
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: theme('colors.neutral.400');
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.neutral.500');
+}
+
+/* 暗色主题滚动条 */
+.dark .custom-scrollbar {
+  scrollbar-color: theme('colors.neutral.600') theme('colors.neutral.800');
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: theme('colors.neutral.800');
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: theme('colors.neutral.600');
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.neutral.500');
+}

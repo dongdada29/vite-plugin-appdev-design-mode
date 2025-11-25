@@ -1,0 +1,89 @@
+{
+  "compilerOptions": {
+    // 目标版本
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    
+    // 模块系统
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    
+    // 严格模式设置
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+    
+    // 路径映射
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+      "@pages/*": ["./src/pages/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@store/*": ["./src/store/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@types/*": ["./src/types/*"]
+    },
+    
+    // 类型检查选项
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    
+    // 实验性功能
+    "allowJs": true,
+    "checkJs": false,
+    
+    // React 相关配置
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    
+    // 装饰器支持（如果需要）
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false,
+    
+    // 输出配置
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true,
+    
+    // 其他配置
+    "removeComments": false,
+    "preserveConstEnums": true,
+    
+    // 性能优化
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsbuildinfo.json"
+  },
+  
+  "include": [
+    "src/**/*",
+    "vite.config.ts",
+    "tailwind.config.js",
+    "postcss.config.js"
+  ],
+  
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ],
+  
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

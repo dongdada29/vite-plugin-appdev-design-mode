@@ -74,7 +74,7 @@ export default function HomePage() {
           <div className="p-6 bg-purple-50 rounded-lg border-2 border-purple-200">
             <h3 className="text-xl font-semibold text-purple-900 mb-2">第三个卡片</h3>
             <p className="text-purple-700">
-              双击这段文字可以直接编辑！121212
+              双击这段文字可以直接编辑！3434341212
             </p>
           </div>
         </div>
