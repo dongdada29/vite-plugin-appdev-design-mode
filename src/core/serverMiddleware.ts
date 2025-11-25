@@ -22,7 +22,7 @@ export function createServerMiddleware(
         case '/__appdev_design_mode/health':
           await handleHealthCheck(res);
           break;
-        
+
         // 新增端点
         case '/__appdev_design_mode/update':
           await handleUpdate(req, res, rootDir);
@@ -48,7 +48,7 @@ export function createServerMiddleware(
         case '/__appdev_design_mode/validate-update':
           await handleValidateUpdate(req, res, rootDir);
           break;
-        
+
         default:
           res.statusCode = 404;
           res.end(JSON.stringify({ error: 'Not found', availableEndpoints: [
@@ -66,7 +66,7 @@ export function createServerMiddleware(
       res.end(
         JSON.stringify({
           error: error instanceof Error ? error.message : 'Unknown error',
-          stack: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.stack : undefined
+          stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
         })
       );
     }
@@ -97,7 +97,7 @@ async function handleGetSource(url: URL, res: any, rootDir: string) {
 
     // 读取文件内容
     const filePath = path.resolve(rootDir, sourceInfo.fileName);
-    
+
     // 检查文件是否存在
     try {
       await fs.promises.access(filePath, fs.constants.F_OK);
@@ -265,7 +265,7 @@ async function handleUpdate(req: any, res: any, rootDir: string) {
 
       // 读取并修改文件
       const fullFilePath = path.resolve(rootDir, filePath);
-      
+
       // 检查文件是否存在
       try {
         await fs.promises.access(fullFilePath, fs.constants.F_OK);
@@ -428,7 +428,7 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string) {
       } catch {
         // 文件不存在或无法读取，创建新的
       }
-      
+
       (sessions as any)[batchId] = batchSession;
       await fs.promises.writeFile(sessionFile, JSON.stringify(sessions, null, 2), 'utf-8');
 
@@ -482,7 +482,7 @@ async function handleGetElementState(req: any, res: any, rootDir: string) {
       }
 
       const filePath = path.resolve(rootDir, sourceInfo.fileName);
-      
+
       // 检查文件是否存在
       try {
         await fs.promises.access(filePath, fs.constants.F_OK);
@@ -531,7 +531,7 @@ async function handleGetElementState(req: any, res: any, rootDir: string) {
  */
 async function handleBatchUpdateStatus(req: any, res: any, rootDir: string) {
   const batchId = req.url.split('?')[1]?.split('=')[1];
-  
+
   if (!batchId) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: 'Missing batchId' }));
@@ -541,7 +541,7 @@ async function handleBatchUpdateStatus(req: any, res: any, rootDir: string) {
   try {
     const sessionFile = path.join(rootDir, '.appdev_batch_sessions.json');
     let sessions = {};
-    
+
     try {
       const existingSessionsContent = await fs.promises.readFile(sessionFile, 'utf-8');
       sessions = JSON.parse(existingSessionsContent);
@@ -659,7 +659,7 @@ async function handleGetHistory(req: any, res: any, rootDir: string) {
   try {
     const sessionFile = path.join(rootDir, '.appdev_batch_sessions.json');
     let sessions = {};
-    
+
     try {
       const existingSessionsContent = await fs.promises.readFile(sessionFile, 'utf-8');
       sessions = JSON.parse(existingSessionsContent);
@@ -701,7 +701,7 @@ async function handleValidateUpdate(req: any, res: any, rootDir: string) {
     try {
       const updateData = JSON.parse(body);
       const validation = await validateUpdateRequest(updateData, rootDir);
-      
+
       res.statusCode = 200;
       res.end(JSON.stringify({
         success: true,
@@ -802,19 +802,19 @@ async function smartReplaceStyle(line: string, options: any): Promise<string> {
       options.newValue
     );
   }
-  
+
   // 如果没有原始值，使用列号信息进行更精确的替换
   const parts = line.split('=');
   if (parts.length >= 2) {
     const attributeName = parts[0].trim();
     const attributeValue = parts.slice(1).join('=').trim();
     const newAttributeValue = options.newValue;
-    
+
     if (attributeName === 'className') {
       return `${attributeName}={${newAttributeValue}}`;
     }
   }
-  
+
   return options.newValue;
 }
 
@@ -827,13 +827,13 @@ async function smartReplaceContent(line: string, options: any): Promise<string> 
       options.newValue
     );
   }
-  
+
   // 如果在标签内容中，尝试替换标签内容部分
   const contentMatch = line.match(/>([^<]*)</);
   if (contentMatch && contentMatch[1] === options.originalValue) {
     return line.replace(contentMatch[0], `>${options.newValue}<`);
   }
-  
+
   return options.newValue;
 }
 
@@ -892,7 +892,7 @@ async function processSingleUpdate(update: any, rootDir: string, batchId: string
 
     const fullFilePath = path.resolve(rootDir, update.filePath);
     const fileContent = await fs.promises.readFile(fullFilePath, 'utf-8');
-    
+
     const updatedContent = await smartReplaceInSource(
       fileContent,
       {
@@ -935,7 +935,7 @@ async function checkForModifications(filePath: string): Promise<boolean> {
     const stat = await fs.promises.stat(filePath);
     const lastModified = stat.mtime.getTime();
     const now = Date.now();
-    
+
     // 如果文件在最近5分钟内被修改过
     return (now - lastModified) < 5 * 60 * 1000;
   } catch {

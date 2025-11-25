@@ -669,6 +669,8 @@ export const DesignModeProvider: React.FC<{
           } catch (e) {
             console.warn('Failed to parse source info:', e);
           }
+        } else {
+          console.warn('[DesignMode] Element selected but missing data-source-info attribute:', element);
         }
       }
     },
