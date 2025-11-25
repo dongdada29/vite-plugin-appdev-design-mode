@@ -357,6 +357,7 @@ export const DesignModeProvider: React.FC<{
               column: sourceInfo.columnNumber,
               newValue: newClass,
               type: 'style',
+              originalValue: oldClass,
             }),
           });
 
@@ -786,7 +787,7 @@ export const DesignModeProvider: React.FC<{
       element.className = mergedClasses;
 
       // 更新源码
-      await updateSource(element, mergedClasses, 'style');
+      await updateSource(element, mergedClasses, 'style', oldClasses);
 
       // 添加到修改历史
       const modification: Modification = {
