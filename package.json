@@ -37,12 +37,16 @@
     "@types/babel__traverse": "^7.20.0",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
     "lint": "eslint src --ext .ts,.tsx"
   }
 }
