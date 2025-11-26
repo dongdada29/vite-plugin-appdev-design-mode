@@ -673,6 +673,12 @@ export const DesignModeProvider: React.FC<{
         } else {
           console.warn('[DesignMode] Element selected but missing data-source-info attribute:', element);
         }
+      } else if (!element && config.iframeMode?.enabled) {
+        sendToParent({
+          type: 'ELEMENT_DESELECTED',
+          payload: null,
+          timestamp: Date.now(),
+        });
       }
     },
     [config.iframeMode?.enabled]

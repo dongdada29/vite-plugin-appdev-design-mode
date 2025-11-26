@@ -187,11 +187,17 @@ async function handleModifySource(req: any, res: any, rootDir: string) {
       const filePath = path.resolve(rootDir, sourceInfo.fileName);
       const fileContent = await fs.promises.readFile(filePath, 'utf-8');
 
-      const updatedContent = replaceInSource(fileContent, {
-        lineNumber: sourceInfo.lineNumber,
-        oldStyles: oldStyles || '',
-        newStyles: newStyles,
-      });
+      const updatedContent = await smartReplaceInSource(
+        fileContent,
+        {
+          lineNumber: sourceInfo.lineNumber,
+          columnNumber: sourceInfo.columnNumber,
+          newValue: newStyles,
+          originalValue: oldStyles || '',
+          type: 'style',
+        },
+        rootDir
+      );
 
       // 写回文件
       await fs.promises.writeFile(filePath, updatedContent, 'utf-8');
