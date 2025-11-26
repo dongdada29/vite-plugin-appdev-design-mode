@@ -674,7 +674,10 @@ export const DesignModeProvider: React.FC<{
             console.warn('Failed to parse source info:', e);
           }
         } else {
-          console.warn('[DesignMode] Element selected but missing data-source-info attribute:', element);
+          console.warn(
+            '[DesignMode] Element selected but missing data-source-info attribute:',
+            element
+          );
         }
       } else if (!element && config.iframeMode?.enabled) {
         sendToParent({
