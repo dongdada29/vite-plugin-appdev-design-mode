@@ -77,59 +77,58 @@ export default function IframeDemoPage() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // Toggle design mode in iframe
-  const toggleIframeDesignMode = () => {
-    const iframe = document.querySelector('iframe');
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage(
-        {
-          type: 'TOGGLE_DESIGN_MODE',
-          enabled: !iframeDesignMode,
-          timestamp: Date.now(),
-        },
-        '*'
-      );
-    }
+  // Debounce hook
+  const useDebounce = <T,>(value: T, delay: number): T => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+      const handler = setTimeout(() => {
+        setDebouncedValue(value);
+      }, delay);
+      return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
   };
 
-  // Update content from external panel
-  const updateContent = () => {
-    if (!selectedElement) {
-      console.warn('[Parent] Cannot update content: no element selected');
-      return;
-    }
+  const debouncedContent = useDebounce(editingContent, 300);
+  const debouncedClass = useDebounce(editingClass, 300);
 
-    // 验证 sourceInfo
-    if (
-      !selectedElement.sourceInfo ||
-      !selectedElement.sourceInfo.fileName ||
-      selectedElement.sourceInfo.lineNumber === 0
-    ) {
-      console.error(
-        '[Parent] Cannot update content: invalid sourceInfo',
-        selectedElement.sourceInfo
+  // Upsert pending change
+  const upsertPendingChange = (
+    type: 'style' | 'content',
+    newValue: string,
+    originalValue?: string
+  ) => {
+    if (!selectedElement) return;
+    setPendingChanges(prev => {
+      const existingIndex = prev.findIndex(
+        item =>
+          item.type === type &&
+          item.sourceInfo.fileName === selectedElement.sourceInfo.fileName &&
+          item.sourceInfo.lineNumber === selectedElement.sourceInfo.lineNumber
       );
-      alert(
-        '无法更新内容：元素信息不完整。请确保在 iframe 中选择了正确的元素。'
-      );
-      return;
-    }
 
-    console.log('[Parent] Sending UPDATE_CONTENT (Preview):', {
-      sourceInfo: selectedElement.sourceInfo,
-      newContent: editingContent,
-    });
-
-    // 添加到待保存列表
-    setPendingChanges(prev => [
-      ...prev,
-      {
-        type: 'content',
+      const newChange = {
+        type,
         sourceInfo: selectedElement.sourceInfo,
-        newValue: editingContent,
-        originalValue: selectedElement.textContent, // 注意：这里可能不是最新的原始值，但在批量更新中后端会处理
-      },
-    ]);
+        newValue,
+        originalValue: originalValue || (type === 'style' ? selectedElement.className : selectedElement.textContent),
+      };
+
+      if (existingIndex >= 0) {
+        const newList = [...prev];
+        newList[existingIndex] = newChange;
+        return newList;
+      } else {
+        return [...prev, newChange];
+      }
+    });
+  };
+
+  // Real-time content update
+  useEffect(() => {
+    if (!selectedElement || debouncedContent === selectedElement.textContent) return;
+
+    upsertPendingChange('content', debouncedContent);
 
     const iframe = document.querySelector('iframe');
     if (iframe && iframe.contentWindow) {
@@ -138,54 +137,21 @@ export default function IframeDemoPage() {
           type: 'UPDATE_CONTENT',
           payload: {
             sourceInfo: selectedElement.sourceInfo,
-            newContent: editingContent,
-            persist: false, // 仅预览，不保存
+            newContent: debouncedContent,
+            persist: false,
           },
           timestamp: Date.now(),
         },
         '*'
       );
     }
-  };
+  }, [debouncedContent]);
 
-  // Update style from external panel
-  const updateStyle = () => {
-    if (!selectedElement) {
-      console.warn('[Parent] Cannot update style: no element selected');
-      return;
-    }
+  // Real-time style update
+  useEffect(() => {
+    if (!selectedElement || debouncedClass === selectedElement.className) return;
 
-    // 验证 sourceInfo
-    if (
-      !selectedElement.sourceInfo ||
-      !selectedElement.sourceInfo.fileName ||
-      selectedElement.sourceInfo.lineNumber === 0
-    ) {
-      console.error(
-        '[Parent] Cannot update style: invalid sourceInfo',
-        selectedElement.sourceInfo
-      );
-      alert(
-        '无法更新样式：元素信息不完整。请确保在 iframe 中选择了正确的元素。'
-      );
-      return;
-    }
-
-    console.log('[Parent] Sending UPDATE_STYLE (Preview):', {
-      sourceInfo: selectedElement.sourceInfo,
-      newClass: editingClass,
-    });
-
-    // 添加到待保存列表
-    setPendingChanges(prev => [
-      ...prev,
-      {
-        type: 'style',
-        sourceInfo: selectedElement.sourceInfo,
-        newValue: editingClass,
-        originalValue: selectedElement.className, // 注意：这里可能不是最新的原始值
-      },
-    ]);
+    upsertPendingChange('style', debouncedClass);
 
     const iframe = document.querySelector('iframe');
     if (iframe && iframe.contentWindow) {
@@ -194,9 +160,97 @@ export default function IframeDemoPage() {
           type: 'UPDATE_STYLE',
           payload: {
             sourceInfo: selectedElement.sourceInfo,
-            newClass: editingClass,
-            persist: false, // 仅预览，不保存
+            newClass: debouncedClass,
+            persist: false,
           },
+          timestamp: Date.now(),
+        },
+        '*'
+      );
+    }
+  }, [debouncedClass]);
+
+  // Style Manager Logic
+  const toggleStyle = (newStyle: string, categoryRegex: RegExp) => {
+    let currentClasses = editingClass.split(' ').filter(c => c.trim());
+
+    // Remove existing class in the same category
+    currentClasses = currentClasses.filter(c => !categoryRegex.test(c));
+
+    // Add new style if it's not empty (allows clearing style)
+    if (newStyle) {
+      currentClasses.push(newStyle);
+    }
+
+    setEditingClass(currentClasses.join(' '));
+  };
+
+  const hasStyle = (style: string) => {
+    return editingClass.split(' ').includes(style);
+  };
+
+  // UI Controls
+  const renderColorPicker = (prefix: string, colors: string[], label: string) => (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        {colors.map(color => {
+          const styleClass = `${prefix}-${color}`;
+          const isActive = hasStyle(styleClass);
+          return (
+            <button
+              key={color}
+              onClick={() => toggleStyle(styleClass, new RegExp(`^${prefix}-[a-z]+(-\\d+)?$`))}
+              className={`w-8 h-8 rounded-full border-2 transition-all ${
+                isActive ? 'border-gray-900 scale-110' : 'border-transparent hover:scale-105'
+              } ${styleClass.replace('text-', 'bg-')}`} // Use bg color for preview
+              title={color}
+            />
+          );
+        })}
+        <button
+            onClick={() => toggleStyle('', new RegExp(`^${prefix}-[a-z]+(-\\d+)?$`))}
+            className="px-2 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100"
+        >
+            清除
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderSelect = (prefix: string, options: { label: string; value: string }[], label: string) => (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        {options.map(opt => {
+            const styleClass = opt.value ? `${prefix}-${opt.value}` : '';
+            const isActive = styleClass ? hasStyle(styleClass) : !options.some(o => o.value && hasStyle(`${prefix}-${o.value}`));
+            return (
+                <button
+                    key={opt.label}
+                    onClick={() => toggleStyle(styleClass, new RegExp(`^${prefix}(-[a-z0-9]+)?$`))}
+                    className={`px-3 py-1 text-sm rounded border transition-all ${
+                        isActive
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                >
+                    {opt.label}
+                </button>
+            )
+        })}
+      </div>
+    </div>
+  );
+
+  // Toggle design mode in iframe
+  const toggleIframeDesignMode = () => {
+    const iframe = document.querySelector('iframe');
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage(
+        {
+          type: 'TOGGLE_DESIGN_MODE',
+          enabled: !iframeDesignMode,
           timestamp: Date.now(),
         },
         '*'
@@ -312,11 +366,6 @@ export default function IframeDemoPage() {
                       <span className='font-medium'>文件:</span>{' '}
                       {selectedElement.sourceInfo.fileName.split('/').pop()}
                     </div>
-                    <div>
-                      <span className='font-medium'>位置:</span>{' '}
-                      {selectedElement.sourceInfo.lineNumber}:
-                      {selectedElement.sourceInfo.columnNumber}
-                    </div>
                   </div>
                 </div>
 
@@ -331,87 +380,57 @@ export default function IframeDemoPage() {
                     className='w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
                     rows={3}
                   />
-                  <button
-                    onClick={updateContent}
-                    className='mt-2 w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors'
-                  >
-                    预览内容更改
-                  </button>
                 </div>
 
-                {/* Style Editor */}
+                <hr className="border-gray-200" />
+
+                {/* Smart Style Controls */}
                 <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-2'>
-                    样式编辑 (className)
+                    <h3 className="text-md font-bold text-gray-900 mb-4">样式设置</h3>
+
+                    {renderColorPicker('bg', ['white', 'gray-100', 'red-100', 'blue-100', 'green-100', 'yellow-100', 'purple-100'], '背景颜色')}
+                    {renderColorPicker('text', ['gray-900', 'gray-500', 'red-600', 'blue-600', 'green-600', 'purple-600', 'white'], '文字颜色')}
+
+                    {renderSelect('p', [
+                        { label: '无', value: '0' },
+                        { label: '小', value: '2' },
+                        { label: '中', value: '4' },
+                        { label: '大', value: '8' },
+                        { label: '特大', value: '12' }
+                    ], '内边距 (Padding)')}
+
+                    {renderSelect('rounded', [
+                        { label: '直角', value: 'none' },
+                        { label: '小圆角', value: 'sm' },
+                        { label: '圆角', value: 'md' },
+                        { label: '大圆角', value: 'lg' },
+                        { label: '全圆角', value: 'full' }
+                    ], '圆角 (Border Radius)')}
+
+                    {renderSelect('text', [
+                        { label: '小', value: 'sm' },
+                        { label: '默认', value: 'base' },
+                        { label: '中', value: 'lg' },
+                        { label: '大', value: 'xl' },
+                        { label: '特大', value: '2xl' }
+                    ], '文字大小 (Font Size)')}
+                </div>
+
+                {/* Raw Style Editor */}
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <label className='block text-sm font-medium text-gray-500 mb-2'>
+                    原始 ClassName (高级)
                   </label>
                   <textarea
                     value={editingClass}
                     onChange={e => setEditingClass(e.target.value)}
-                    className='w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm'
-                    rows={4}
+                    className='w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-xs text-gray-500'
+                    rows={2}
                   />
-                  <button
-                    onClick={updateStyle}
-                    className='mt-2 w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors'
-                  >
-                    预览样式更改
-                  </button>
-                </div>
-
-                {/* Quick Style Presets */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-2'>
-                    快速样式
-                  </label>
-                  <div className='grid grid-cols-2 gap-2'>
-                    <button
-                      onClick={() =>
-                        setEditingClass(editingClass + ' bg-red-100')
-                      }
-                      className='px-3 py-2 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200'
-                    >
-                      红色背景
-                    </button>
-                    <button
-                      onClick={() =>
-                        setEditingClass(editingClass + ' bg-blue-100')
-                      }
-                      className='px-3 py-2 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200'
-                    >
-                      蓝色背景
-                    </button>
-                    <button
-                      onClick={() => setEditingClass(editingClass + ' p-8')}
-                      className='px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200'
-                    >
-                      大内边距
-                    </button>
-                    <button
-                      onClick={() =>
-                        setEditingClass(editingClass + ' rounded-xl')
-                      }
-                      className='px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200'
-                    >
-                      圆角
-                    </button>
-                  </div>
                 </div>
               </div>
             ) : (
               <div className='text-center py-12 text-gray-500'>
-                <svg
-                  className='w-16 h-16 mx-auto mb-4 text-gray-300'
-                  fill='none'
-                  stroke='currentColor'
-                  viewBox='0 0 24 24'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122'
-                  />
-                </svg>
                 <p className='text-sm'>
                   {iframeDesignMode
                     ? '点击 iframe 内的元素开始编辑'

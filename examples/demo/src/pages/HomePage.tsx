@@ -22,8 +22,8 @@ export default function HomePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">样式编辑1212232312122323</h3>
-          <p className="text-gray-600 bg-red-100">
+          <h3 className="text-xl font-semibold text-gray-900 mb-2 bg-red-100">样式编辑1212</h3>
+          <p className="text-gray-600 bg-gray-100">
             点击任意元素，实时修改其 Tailwind CSS 类。
           </p>
         </div>
@@ -34,8 +34,8 @@ export default function HomePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">内容编辑121223</h3>
-          <p className="text-gray-600 bg-red-100">
+          <h3 className="text-xl font-semibold text-gray-900 mb-2 bg-red-100">内容编辑12</h3>
+          <p className="text-gray-600 bg-gray-100">
             双击文本元素直接编辑内容，自动更新源文件。
           </p>
         </div>
@@ -46,8 +46,8 @@ export default function HomePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">源码更新</h3>
-          <p className="text-gray-600 bg-red-100">
+          <h3 className="text-xl font-semibold text-gray-900 mb-2 bg-red-100">源码更新</h3>
+          <p className="text-gray-600 bg-gray-100">
             所有修改都会自动保存到源代码文件中。
           </p>
         </div>
