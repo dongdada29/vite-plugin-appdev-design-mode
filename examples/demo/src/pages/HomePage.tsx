@@ -23,7 +23,7 @@ export default function HomePage() {
             </svg>
           </div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">样式编辑1212232312122323</h3>
-          <p className="text-gray-600">
+          <p className="text-gray-600 bg-red-100">
             点击任意元素，实时修改其 Tailwind CSS 类。
           </p>
         </div>
@@ -34,8 +34,8 @@ export default function HomePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">内容编辑1212</h3>
-          <p className="text-gray-600">
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">内容编辑121223</h3>
+          <p className="text-gray-600 bg-red-100">
             双击文本元素直接编辑内容，自动更新源文件。
           </p>
         </div>
@@ -47,7 +47,7 @@ export default function HomePage() {
             </svg>
           </div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">源码更新</h3>
-          <p className="text-gray-600">
+          <p className="text-gray-600 bg-red-100">
             所有修改都会自动保存到源代码文件中。
           </p>
         </div>
@@ -59,13 +59,13 @@ export default function HomePage() {
         <div className="space-y-4">
           <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
             <h3 className="text-xl font-semibold text-blue-900 mb-2">可编辑卡片</h3>
-            <p className="text-blue-700">
+            <p className="text-blue-700 bg-blue-100 bg-red-100">
               这是一个可编辑的段落。在设计模式下试着点击它！
             </p>
           </div>
 
           <div className="p-6 bg-green-50 rounded-lg border-2 border-green-200">
-            <h3 className="text-xl font-semibold text-green-900 mb-2">另一个卡片</h3>
+            <h3 className="text-xl font-semibold text-green-900 mb-2 bg-blue-100">另一个卡片</h3>
             <p className="text-green-700">
               你可以修改背景、文字颜色、内边距等等。
             </p>

@@ -16,6 +16,14 @@ export default function IframeDemoPage() {
   );
   const [editingContent, setEditingContent] = useState('');
   const [editingClass, setEditingClass] = useState('');
+  const [pendingChanges, setPendingChanges] = useState<
+    Array<{
+      type: 'style' | 'content';
+      sourceInfo: any;
+      newValue: string;
+      originalValue?: string;
+    }>
+  >([]);
 
   // Listen for messages from iframe
   useEffect(() => {
@@ -107,10 +115,21 @@ export default function IframeDemoPage() {
       return;
     }
 
-    console.log('[Parent] Sending UPDATE_CONTENT:', {
+    console.log('[Parent] Sending UPDATE_CONTENT (Preview):', {
       sourceInfo: selectedElement.sourceInfo,
       newContent: editingContent,
     });
+
+    // 添加到待保存列表
+    setPendingChanges(prev => [
+      ...prev,
+      {
+        type: 'content',
+        sourceInfo: selectedElement.sourceInfo,
+        newValue: editingContent,
+        originalValue: selectedElement.textContent, // 注意：这里可能不是最新的原始值，但在批量更新中后端会处理
+      },
+    ]);
 
     const iframe = document.querySelector('iframe');
     if (iframe && iframe.contentWindow) {
@@ -120,6 +139,7 @@ export default function IframeDemoPage() {
           payload: {
             sourceInfo: selectedElement.sourceInfo,
             newContent: editingContent,
+            persist: false, // 仅预览，不保存
           },
           timestamp: Date.now(),
         },
@@ -151,10 +171,21 @@ export default function IframeDemoPage() {
       return;
     }
 
-    console.log('[Parent] Sending UPDATE_STYLE:', {
+    console.log('[Parent] Sending UPDATE_STYLE (Preview):', {
       sourceInfo: selectedElement.sourceInfo,
       newClass: editingClass,
     });
+
+    // 添加到待保存列表
+    setPendingChanges(prev => [
+      ...prev,
+      {
+        type: 'style',
+        sourceInfo: selectedElement.sourceInfo,
+        newValue: editingClass,
+        originalValue: selectedElement.className, // 注意：这里可能不是最新的原始值
+      },
+    ]);
 
     const iframe = document.querySelector('iframe');
     if (iframe && iframe.contentWindow) {
@@ -164,11 +195,52 @@ export default function IframeDemoPage() {
           payload: {
             sourceInfo: selectedElement.sourceInfo,
             newClass: editingClass,
+            persist: false, // 仅预览，不保存
           },
           timestamp: Date.now(),
         },
         '*'
       );
+    }
+  };
+
+  // 保存所有更改
+  const saveChanges = async () => {
+    if (pendingChanges.length === 0) return;
+
+    console.log('[Parent] Saving changes...', pendingChanges);
+
+    try {
+      const response = await fetch('/__appdev_design_mode/batch-update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          updates: pendingChanges.map(change => ({
+            filePath: change.sourceInfo.fileName,
+            line: change.sourceInfo.lineNumber,
+            column: change.sourceInfo.columnNumber,
+            newValue: change.newValue,
+            type: change.type,
+            originalValue: change.originalValue,
+          })),
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[Parent] Batch update success:', result);
+        alert(`成功保存 ${result.summary.successful} 个更改！`);
+        setPendingChanges([]); // 清空待保存列表
+      } else {
+        const error = await response.json();
+        console.error('[Parent] Batch update failed:', error);
+        alert('保存失败，请查看控制台错误信息。');
+      }
+    } catch (error) {
+      console.error('[Parent] Error saving changes:', error);
+      alert('保存出错，请检查网络连接。');
     }
   };
 
@@ -180,16 +252,39 @@ export default function IframeDemoPage() {
           <h1 className='text-2xl font-bold text-gray-900'>
             Iframe 设计模式演示
           </h1>
-          <button
-            onClick={toggleIframeDesignMode}
-            className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-              iframeDesignMode
-                ? 'bg-green-500 hover:bg-green-600 text-white'
-                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-            }`}
-          >
-            {iframeDesignMode ? '✓ 设计模式已启用' : '启用设计模式'}
-          </button>
+          <div className='flex gap-4'>
+            {pendingChanges.length > 0 && (
+              <button
+                onClick={saveChanges}
+                className='px-6 py-2 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-md flex items-center gap-2'
+              >
+                <span>保存更改 ({pendingChanges.length})</span>
+                <svg
+                  className='w-4 h-4'
+                  fill='none'
+                  stroke='currentColor'
+                  viewBox='0 0 24 24'
+                >
+                  <path
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    strokeWidth={2}
+                    d='M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4'
+                  />
+                </svg>
+              </button>
+            )}
+            <button
+              onClick={toggleIframeDesignMode}
+              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                iframeDesignMode
+                  ? 'bg-green-500 hover:bg-green-600 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+            >
+              {iframeDesignMode ? '✓ 设计模式已启用' : '启用设计模式'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -240,7 +335,7 @@ export default function IframeDemoPage() {
                     onClick={updateContent}
                     className='mt-2 w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors'
                   >
-                    更新内容
+                    预览内容更改
                   </button>
                 </div>
 
@@ -259,7 +354,7 @@ export default function IframeDemoPage() {
                     onClick={updateStyle}
                     className='mt-2 w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors'
                   >
-                    更新样式
+                    预览样式更改
                   </button>
                 </div>
 

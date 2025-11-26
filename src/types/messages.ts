@@ -94,6 +94,7 @@ export interface UpdateStyleMessage {
   payload: {
     sourceInfo: SourceInfo;
     newClass: string;
+    persist?: boolean;
   };
   requestId?: string;
   timestamp?: number;
@@ -104,6 +105,7 @@ export interface UpdateContentMessage {
   payload: {
     sourceInfo: SourceInfo;
     newContent: string;
+    persist?: boolean;
   };
   requestId?: string;
   timestamp?: number;

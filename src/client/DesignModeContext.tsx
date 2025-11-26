@@ -494,31 +494,34 @@ export const DesignModeProvider: React.FC<{
           setSelectedElement(element);
         }
 
-        // 更新源码 - 使用 extractSourceInfo 获取源码信息
-        const elementSourceInfo = extractSourceInfo(element);
-        if (elementSourceInfo) {
-          try {
-            const response = await fetch('/__appdev_design_mode/update', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                filePath: elementSourceInfo.fileName,
-                line: elementSourceInfo.lineNumber,
-                column: elementSourceInfo.columnNumber,
-                newValue: newContent,
-                type: 'content',
-                originalValue: originalContent,
-              }),
-            });
+        // 只有在 persist 为 true (默认) 时才更新源码
+        if (updateMessage.payload.persist !== false) {
+          // 更新源码 - 使用 extractSourceInfo 获取源码信息
+          const elementSourceInfo = extractSourceInfo(element);
+          if (elementSourceInfo) {
+            try {
+              const response = await fetch('/__appdev_design_mode/update', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  filePath: elementSourceInfo.fileName,
+                  line: elementSourceInfo.lineNumber,
+                  column: elementSourceInfo.columnNumber,
+                  newValue: newContent,
+                  type: 'content',
+                  originalValue: originalContent,
+                }),
+              });
 
-            if (!response.ok) {
-              throw new Error('Failed to update source');
+              if (!response.ok) {
+                throw new Error('Failed to update source');
+              }
+            } catch (error) {
+              console.error('[DesignMode] Error updating source:', error);
+              throw error;
             }
-          } catch (error) {
-            console.error('[DesignMode] Error updating source:', error);
-            throw error;
           }
         }
 
