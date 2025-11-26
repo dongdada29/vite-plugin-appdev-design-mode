@@ -51,6 +51,7 @@ const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
 
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -112,7 +113,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
     transformIndexHtml(html) {
       if (!options.enabled) return html;
 
-      const clientEntryPath = resolve(__dirname, 'client/index.tsx');
+      const clientEntryPath = resolveClientEntryPath();
 
       return {
         html,
@@ -225,4 +226,21 @@ function shouldProcessFile(
 }
 
 export default appdevDesignModePlugin;
+
+function resolveClientEntryPath(): string {
+  const distClientPath = resolve(__dirname, 'client/index.tsx');
+  const sourceClientPath = resolve(__dirname, '../src/client/index.tsx');
+
+  if (existsSync(distClientPath)) {
+    return distClientPath;
+  }
+
+  if (existsSync(sourceClientPath)) {
+    return sourceClientPath;
+  }
+
+  throw new Error(
+    '[appdev-design-mode] 无法定位客户端入口文件 client/index.tsx'
+  );
+}
 
