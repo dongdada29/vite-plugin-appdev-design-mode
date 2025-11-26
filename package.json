@@ -1,6 +1,6 @@
 {
   "name": "@xagi/vite-plugin-design-mode",
-  "version": "1.0.0",
+  "version": "1.0.",
   "description": "Vite plugin for Design Mode - enables visual editing of React components with source mapping",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -36,6 +36,8 @@
     "@types/babel__standalone": "^7.1.9",
     "@types/babel__traverse": "^7.20.0",
     "@types/node": "^20.0.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "typescript": "^5.0.0",
     "vite": "^5.0.0",
     "vitest": "^1.0.0"

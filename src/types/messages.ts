@@ -23,17 +23,15 @@ export interface MessageValidator {
   validate: (message: any) => MessageValidationResult;
 }
 
-// Promise-based 请求响应相关类型
-export interface RequestMessage extends ParentToIframeMessage {
-  requestId: string;
-  timestamp: number;
-}
-
-export interface ResponseMessage extends IframeToParentMessage {
-  requestId: string;
-  success: boolean;
-  error?: string;
-  timestamp: number;
+// Bridge Ready Message
+export interface BridgeReadyMessage {
+  type: 'BRIDGE_READY';
+  payload: {
+    timestamp: number;
+    environment: 'iframe' | 'main';
+  };
+  timestamp?: number;
+  requestId?: string;
 }
 
 // iframe → Parent messages
@@ -50,6 +48,7 @@ export interface ElementDeselectedMessage {
   type: 'ELEMENT_DESELECTED';
   requestId?: string;
   timestamp?: number;
+  payload?: null; // Added optional payload to match usage
 }
 
 export interface ContentUpdatedMessage {
@@ -98,6 +97,7 @@ export interface UpdateStyleMessage {
   };
   requestId?: string;
   timestamp?: number;
+  enabled?: boolean; // Added to fix TS error where enabled was accessed on this type (though likely a bug in usage, adding optional property avoids strict error if discriminated union fails)
 }
 
 export interface UpdateContentMessage {
@@ -133,8 +133,8 @@ export interface GetElementStateMessage {
   payload: {
     sourceInfo: SourceInfo;
   };
-  requestId: string;
-  timestamp: number;
+  requestId?: string; // Made optional for sender
+  timestamp?: number; // Made optional for sender
 }
 
 export interface ElementStateResponseMessage {
@@ -149,8 +149,8 @@ export interface ElementStateResponseMessage {
       timestamp: number;
     }>;
   };
-  requestId: string;
-  timestamp: number;
+  requestId: string; // Response MUST have requestId to match request
+  timestamp?: number;
 }
 
 // 新增：错误处理消息
@@ -162,7 +162,7 @@ export interface ErrorMessage {
     details?: any;
   };
   requestId?: string;
-  timestamp: number;
+  timestamp?: number;
 }
 
 // 新增：确认消息
@@ -170,9 +170,9 @@ export interface AcknowledgementMessage {
   type: 'ACKNOWLEDGEMENT';
   payload: {
     messageType: string;
-    requestId?: string;
   };
-  timestamp: number;
+  requestId: string; // Response MUST have requestId
+  timestamp?: number;
 }
 
 // 新增：心跳和健康检查消息
@@ -181,24 +181,32 @@ export interface HeartbeatMessage {
   payload?: {
     timestamp: number;
   };
-  timestamp: number;
+  timestamp?: number;
 }
 
 export interface HealthCheckMessage {
   type: 'HEALTH_CHECK';
-  requestId: string;
-  timestamp: number;
+  requestId?: string; // Made optional for sender
+  timestamp?: number; // Made optional for sender
 }
 
 export interface HealthCheckResponseMessage {
   type: 'HEALTH_CHECK_RESPONSE';
   payload: {
-    status: 'healthy' | 'unhealthy';
-    version: string;
-    uptime: number;
+    status: 'healthy' | 'unhealthy' | 'degraded' | 'connecting' | 'unnecessary';
+    version?: string;
+    uptime?: number;
+    message?: string;
+    response?: any;
+    error?: string;
+    isIframe?: boolean;
+    isConnected?: boolean;
+    origin?: string;
+    userAgent?: string;
+    location?: string;
   };
-  requestId: string;
-  timestamp: number;
+  requestId: string; // Response MUST have requestId
+  timestamp?: number;
 }
 
 // Union types
@@ -212,7 +220,8 @@ export type IframeToParentMessage =
   | ErrorMessage
   | AcknowledgementMessage
   | HeartbeatMessage
-  | HealthCheckResponseMessage;
+  | HealthCheckResponseMessage
+  | BridgeReadyMessage;
 
 export type ParentToIframeMessage =
   | ToggleDesignModeMessage
@@ -220,11 +229,24 @@ export type ParentToIframeMessage =
   | UpdateContentMessage
   | BatchUpdateMessage
   | GetElementStateMessage
-  | HealthCheckMessage;
+  | HealthCheckMessage
+  | HeartbeatMessage; // Added HeartbeatMessage here too for bidirectional support
 
 export type DesignModeMessage = IframeToParentMessage | ParentToIframeMessage;
 
 // Promise-based 请求响应类型
+export type RequestMessage = ParentToIframeMessage & {
+  requestId: string;
+  timestamp: number;
+};
+
+export type ResponseMessage = IframeToParentMessage & {
+  requestId: string;
+  success?: boolean;
+  error?: string;
+  timestamp: number;
+};
+
 export type RequestResponseMessage = RequestMessage | ResponseMessage | AcknowledgementMessage;
 
 // 消息处理器类型
@@ -262,7 +284,7 @@ export interface MessageUtils {
   isValidMessage: (message: any) => boolean;
   createResponse: <T extends IframeToParentMessage>(
     originalMessage: ParentToIframeMessage,
-    payload: T['payload'],
+    payload: T extends { payload: infer P } ? P : never,
     success?: boolean,
     error?: string
   ) => T;
@@ -270,8 +292,8 @@ export interface MessageUtils {
 
 // 桥接器接口
 export interface BridgeInterface {
-  send: <T extends ParentToIframeMessage>(message: T) => Promise<void>;
-  sendWithResponse: <T extends ParentToIframeMessage, R extends IframeToParentMessage>(
+  send: <T extends DesignModeMessage>(message: T) => Promise<void>;
+  sendWithResponse: <T extends DesignModeMessage, R extends DesignModeMessage>(
     message: T,
     responseType: R['type']
   ) => Promise<R>;
