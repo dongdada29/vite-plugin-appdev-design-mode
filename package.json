@@ -1,9 +1,17 @@
 {
   "name": "@xagi/vite-plugin-design-mode",
-  "version": "1.0.",
+  "version": "1.0.2",
   "description": "Vite plugin for Design Mode - enables visual editing of React components with source mapping",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.umd.js"
+    }
+  },
   "files": [
     "dist",
     "README.md"
@@ -27,8 +35,8 @@
     "@babel/standalone": "^7.23.0",
     "@babel/traverse": "^7.24.0",
     "clsx": "^2.1.1",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
@@ -36,15 +44,15 @@
     "@types/babel__standalone": "^7.1.9",
     "@types/babel__traverse": "^7.20.0",
     "@types/node": "^20.0.0",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "typescript": "^5.0.0",
     "vite": "^5.0.0",
     "vitest": "^1.0.0"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build && tsc",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
