@@ -339,41 +339,12 @@ export class SelectionManager {
     const rect = element.getBoundingClientRect();
     const computedStyle = window.getComputedStyle(element);
 
+    // Note: elementId is not part of ElementInfo anymore
     return {
       tagName: element.tagName.toLowerCase(),
       className: element.className || '',
       textContent: this.getElementTextContent(element),
       sourceInfo,
-      // 扩展信息
-      elementId: element.id || '',
-      attributes: this.getElementAttributes(element),
-      computedStyles: {
-        display: computedStyle.display,
-        position: computedStyle.position,
-        width: computedStyle.width,
-        height: computedStyle.height,
-        backgroundColor: computedStyle.backgroundColor,
-        color: computedStyle.color,
-        fontSize: computedStyle.fontSize,
-        fontFamily: computedStyle.fontFamily,
-        zIndex: computedStyle.zIndex
-      },
-      boundingBox: {
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height,
-        bottom: rect.bottom,
-        right: rect.right
-      },
-      // DOM路径
-      domPath: this.getElementDomPath(element),
-      // 父元素信息
-      parentInfo: element.parentElement ? {
-        tagName: element.parentElement.tagName.toLowerCase(),
-        className: element.parentElement.className,
-        id: element.parentElement.id
-      } : null
     };
   }
 
@@ -527,6 +498,7 @@ export const useSelectionManager = (config?: {
         'script', 'style', 'meta', 'link', 'head', 'title', 'html', 'body',
         '[data-selection-exclude="true"]', '.no-selection'
       ],
+      includeOnlyElements: false,
       ...config
     });
 

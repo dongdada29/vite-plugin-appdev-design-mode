@@ -13,6 +13,13 @@ import {
   BridgeConfig,
   ElementInfo,
   SourceInfo,
+  ToggleDesignModeMessage,
+  UpdateStyleMessage,
+  UpdateContentMessage,
+  BatchUpdateMessage,
+  HeartbeatMessage,
+  HealthCheckMessage,
+  HealthCheckResponseMessage,
 } from '../types/messages';
 import { bridge, messageValidator } from './bridge';
 
@@ -70,10 +77,10 @@ interface DesignModeContextType {
   resetModifications: () => void;
 
   // 桥接器方法
-  sendMessage: <T extends ParentToIframeMessage>(message: T) => Promise<void>;
+  sendMessage: <T extends DesignModeMessage>(message: T) => Promise<void>;
   sendMessageWithResponse: <
-    T extends ParentToIframeMessage,
-    R extends IframeToParentMessage,
+    T extends DesignModeMessage,
+    R extends DesignModeMessage,
   >(
     message: T,
     responseType: R['type']
@@ -146,7 +153,7 @@ export const DesignModeProvider: React.FC<{
 
       // 监听桥接器连接状态
       const connectionCheck = setInterval(() => {
-        const connected = bridge.isConnectedToTarget();
+        const connected = bridge.isConnected();
         setIsConnected(connected);
         setBridgeStatus(connected ? 'connected' : 'disconnected');
       }, 1000);
@@ -156,7 +163,7 @@ export const DesignModeProvider: React.FC<{
 
       // 监听设计模式切换
       unsubscribeHandlers.push(
-        bridge.on<ParentToIframeMessage>('TOGGLE_DESIGN_MODE', message => {
+        bridge.on<ToggleDesignModeMessage>('TOGGLE_DESIGN_MODE', message => {
           const newState = message.enabled;
           setIsDesignMode(newState);
 
@@ -173,28 +180,28 @@ export const DesignModeProvider: React.FC<{
 
       // 监听样式更新
       unsubscribeHandlers.push(
-        bridge.on<ParentToIframeMessage>('UPDATE_STYLE', async message => {
+        bridge.on<UpdateStyleMessage>('UPDATE_STYLE', async message => {
           await handleExternalStyleUpdate(message);
         })
       );
 
       // 监听内容更新
       unsubscribeHandlers.push(
-        bridge.on<ParentToIframeMessage>('UPDATE_CONTENT', async message => {
+        bridge.on<UpdateContentMessage>('UPDATE_CONTENT', async message => {
           await handleExternalContentUpdate(message);
         })
       );
 
       // 监听批量更新
       unsubscribeHandlers.push(
-        bridge.on<ParentToIframeMessage>('BATCH_UPDATE', async message => {
+        bridge.on<BatchUpdateMessage>('BATCH_UPDATE', async message => {
           await handleExternalBatchUpdate(message);
         })
       );
 
       // 监听心跳
       unsubscribeHandlers.push(
-        bridge.on<ParentToIframeMessage>('HEARTBEAT', _ => {
+        bridge.on<HeartbeatMessage>('HEARTBEAT', _ => {
           // 回复心跳
           bridge.send({
             type: 'HEARTBEAT',
@@ -206,19 +213,20 @@ export const DesignModeProvider: React.FC<{
 
       // 监听健康检查
       unsubscribeHandlers.push(
-        bridge.on<ParentToIframeMessage>('HEALTH_CHECK', async message => {
+        bridge.on<HealthCheckMessage>('HEALTH_CHECK', async message => {
           const healthStatus = await bridge.healthCheck();
-          bridge.send({
+          // Use a type assertion or construct the object carefully to match HealthCheckResponseMessage
+          const response: HealthCheckResponseMessage = {
             type: 'HEALTH_CHECK_RESPONSE',
             payload: {
-              status:
-                healthStatus.status === 'healthy' ? 'healthy' : 'unhealthy',
+              status: healthStatus.status === 'healthy' ? 'healthy' : 'unhealthy',
               version: '2.0.0',
-              uptime: Date.now() - (window as any).__startTime || 0,
+              uptime: Date.now() - ((window as any).__startTime || 0),
             },
-            requestId: message.requestId,
+            requestId: message.requestId || '', // Provide requestId
             timestamp: Date.now(),
-          });
+          };
+          bridge.send(response);
         })
       );
 
@@ -245,7 +253,7 @@ export const DesignModeProvider: React.FC<{
    */
   const sendToParent = useCallback(
     (message: IframeToParentMessage) => {
-      if (config.iframeMode?.enabled && bridge.isConnectedToTarget()) {
+      if (config.iframeMode?.enabled && bridge.isConnected()) {
         bridge.send(message).catch(error => {
           console.error(
             '[DesignMode] Failed to send message to parent:',
@@ -261,10 +269,10 @@ export const DesignModeProvider: React.FC<{
    * 处理外部样式更新
    */
   const handleExternalStyleUpdate = useCallback(
-    async (message: ParentToIframeMessage) => {
+    async (message: UpdateStyleMessage) => {
       if (!config.iframeMode?.enabled) return;
 
-      const updateMessage = message as any;
+      const updateMessage = message;
       const { sourceInfo, newClass } = updateMessage.payload;
 
       try {
@@ -411,10 +419,10 @@ export const DesignModeProvider: React.FC<{
    * 处理外部内容更新
    */
   const handleExternalContentUpdate = useCallback(
-    async (message: ParentToIframeMessage) => {
+    async (message: UpdateContentMessage) => {
       if (!config.iframeMode?.enabled) return;
 
-      const updateMessage = message as any;
+      const updateMessage = message;
       const { sourceInfo, newContent } = updateMessage.payload;
 
       try {
@@ -567,8 +575,8 @@ export const DesignModeProvider: React.FC<{
    * 处理外部批量更新
    */
   const handleExternalBatchUpdate = useCallback(
-    async (message: ParentToIframeMessage) => {
-      const updateMessage = message as any;
+    async (message: BatchUpdateMessage) => {
+      const updateMessage = message;
       const { updates } = updateMessage.payload;
 
       try {
@@ -682,7 +690,6 @@ export const DesignModeProvider: React.FC<{
       } else if (!element && config.iframeMode?.enabled) {
         sendToParent({
           type: 'ELEMENT_DESELECTED',
-          payload: null,
           timestamp: Date.now(),
         });
       }
@@ -972,7 +979,7 @@ export const DesignModeProvider: React.FC<{
    * 发送消息到父窗口
    */
   const sendMessage = useCallback(
-    async <T extends ParentToIframeMessage>(message: T) => {
+    async <T extends DesignModeMessage>(message: T) => {
       if (config.iframeMode?.enabled) {
         await bridge.send(message);
       }
@@ -984,7 +991,7 @@ export const DesignModeProvider: React.FC<{
    * 发送消息并等待响应
    */
   const sendMessageWithResponse = useCallback(
-    async <T extends ParentToIframeMessage, R extends IframeToParentMessage>(
+    async <T extends DesignModeMessage, R extends DesignModeMessage>(
       message: T,
       responseType: R['type']
     ): Promise<R> => {

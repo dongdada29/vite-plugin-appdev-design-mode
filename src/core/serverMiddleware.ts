@@ -380,7 +380,14 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string) {
 
       // 创建批量更新会话
       const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const batchSession = {
+      const batchSession: {
+        id: string;
+        timestamp: number;
+        totalUpdates: number;
+        successfulUpdates: number;
+        failedUpdates: number;
+        updates: any[];
+      } = {
         id: batchId,
         timestamp: Date.now(),
         totalUpdates: updates.length,

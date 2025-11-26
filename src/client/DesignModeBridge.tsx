@@ -1,6 +1,13 @@
 import React, { useEffect, useCallback } from 'react';
 import { useDesignMode } from './DesignModeContext';
 import { bridge } from './bridge';
+import {
+  UpdateStyleMessage,
+  UpdateContentMessage,
+  ToggleDesignModeMessage,
+  ElementSelectedMessage,
+  ElementDeselectedMessage
+} from '../types/messages';
 
 export const DesignModeBridge: React.FC = () => {
   const { selectedElement, modifyElementClass, updateElementContent } =
@@ -44,7 +51,7 @@ export const DesignModeBridge: React.FC = () => {
           timestamp: Date.now(),
         };
 
-        await bridge.send(message);
+        await bridge.send(message as any);
         console.log('[DesignModeBridge] Message sent:', type, payload);
       } catch (error) {
         console.warn('[DesignModeBridge] Failed to send message:', error);
@@ -73,6 +80,7 @@ export const DesignModeBridge: React.FC = () => {
           allAttributes: Array.from(selectedElement.attributes).map(attr => ({
             name: attr.name,
             value: attr.value,
+            type: 'attribute'
           })),
         });
 
@@ -123,7 +131,8 @@ export const DesignModeBridge: React.FC = () => {
       return;
     }
 
-    const unsubscribeStyle = bridge.on('UPDATE_STYLE', (payload: any) => {
+    const unsubscribeStyle = bridge.on<UpdateStyleMessage>('UPDATE_STYLE', (message) => {
+      const payload = message.payload;
       console.log('[DesignModeBridge] Received style update:', payload);
 
       if (selectedElement && payload?.sourceInfo && payload?.newClass) {
@@ -155,7 +164,8 @@ export const DesignModeBridge: React.FC = () => {
       }
     });
 
-    const unsubscribeContent = bridge.on('UPDATE_CONTENT', (payload: any) => {
+    const unsubscribeContent = bridge.on<UpdateContentMessage>('UPDATE_CONTENT', (message) => {
+      const payload = message.payload;
       console.log('[DesignModeBridge] Received content update:', payload);
 
       if (
@@ -192,10 +202,10 @@ export const DesignModeBridge: React.FC = () => {
     });
 
     // 监听设计模式切换
-    const unsubscribeToggle = bridge.on(
+    const unsubscribeToggle = bridge.on<ToggleDesignModeMessage>(
       'TOGGLE_DESIGN_MODE',
-      (payload: any) => {
-        console.log('[DesignModeBridge] Received design mode toggle:', payload);
+      (message) => {
+        console.log('[DesignModeBridge] Received design mode toggle:', message);
         // 这里可以添加设计模式切换逻辑
       }
     );

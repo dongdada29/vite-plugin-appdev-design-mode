@@ -6,8 +6,12 @@ import {
   MessageValidator,
   BridgeInterface,
   BridgeConfig,
-  MessageUtils,
-  MessageValidationResult
+  MessageUtils as MessageUtilsInterface,
+  MessageValidationResult,
+  AcknowledgementMessage,
+  HealthCheckMessage,
+  HealthCheckResponseMessage,
+  HeartbeatMessage
 } from '../types/messages';
 
 /**
@@ -24,7 +28,7 @@ export class EnhancedBridge implements BridgeInterface {
   }> = new Map();
   
   private config: BridgeConfig;
-  private isConnected = false;
+  private _isConnected = false;
   private lastHeartbeat = 0;
   private heartbeatTimer?: NodeJS.Timeout;
   private connectionCheckTimer?: NodeJS.Timeout;
@@ -48,13 +52,15 @@ export class EnhancedBridge implements BridgeInterface {
    * 初始化消息处理
    */
   private initializeMessageHandling() {
+    if (typeof window === 'undefined') return;
+
     window.addEventListener('message', this.handleMessage.bind(this));
     
     // 在iframe环境中，延迟标记为已连接
     // 给父窗口时间准备接收消息
     if (this.isIframeEnvironment()) {
       setTimeout(() => {
-        this.isConnected = true;
+        this._isConnected = true;
         this.log('Bridge initialized and connected (iframe mode)');
         
         // 发送就绪消息到父窗口
@@ -63,7 +69,7 @@ export class EnhancedBridge implements BridgeInterface {
     } else {
       // 在主窗口中，直接标记为已连接
       setTimeout(() => {
-        this.isConnected = true;
+        this._isConnected = true;
         this.log('Bridge initialized and connected (main window mode)');
       }, 100);
     }
@@ -94,6 +100,8 @@ export class EnhancedBridge implements BridgeInterface {
    * 初始化心跳机制
    */
   private initializeHeartbeat() {
+    if (typeof window === 'undefined') return;
+
     // 如果我们在iframe中，定期发送心跳
     if (this.isIframeEnvironment()) {
       this.heartbeatTimer = setInterval(() => {
@@ -106,6 +114,8 @@ export class EnhancedBridge implements BridgeInterface {
    * 初始化连接检查
    */
   private initializeConnectionCheck() {
+    if (typeof window === 'undefined') return;
+
     this.connectionCheckTimer = setInterval(() => {
       this.checkConnection();
     }, this.config.heartbeatInterval * 2);
@@ -115,7 +125,7 @@ export class EnhancedBridge implements BridgeInterface {
    * 检查当前是否为iframe环境
    */
   private isIframeEnvironment(): boolean {
-    return window.self !== window.top;
+    return typeof window !== 'undefined' && window.self !== window.top;
   }
 
   /**
@@ -128,9 +138,19 @@ export class EnhancedBridge implements BridgeInterface {
     userAgent: string;
     location: string;
   } {
+    if (typeof window === 'undefined') {
+      return {
+        isIframe: false,
+        isConnected: false,
+        origin: '',
+        userAgent: '',
+        location: ''
+      };
+    }
+
     return {
       isIframe: this.isIframeEnvironment(),
-      isConnected: this.isConnected,
+      isConnected: this._isConnected,
       origin: window.location.origin,
       userAgent: navigator.userAgent.substring(0, 100),
       location: window.location.href
@@ -145,7 +165,7 @@ export class EnhancedBridge implements BridgeInterface {
     
     console.group('[EnhancedBridge] Bridge Diagnosis');
     console.log('Environment:', env);
-    console.log('Connection Status:', this.isConnected);
+    console.log('Connection Status:', this._isConnected);
     console.log('Pending Requests:', this.pendingRequests.size);
     console.log('Message Listeners:', Array.from(this.listeners.keys()));
     console.log('Config:', this.config);
@@ -185,7 +205,7 @@ export class EnhancedBridge implements BridgeInterface {
     // 处理桥接就绪消息
     if (message.type === 'BRIDGE_READY') {
       this.log('Received ready message from child');
-      this.isConnected = true;
+      this._isConnected = true;
       return;
     }
 
@@ -239,7 +259,7 @@ export class EnhancedBridge implements BridgeInterface {
       // Iframe to Parent
       'ELEMENT_SELECTED', 'ELEMENT_DESELECTED', 'CONTENT_UPDATED', 'STYLE_UPDATED',
       'DESIGN_MODE_CHANGED', 'ELEMENT_STATE_RESPONSE', 'ERROR', 'ACKNOWLEDGEMENT',
-      'HEARTBEAT', 'HEALTH_CHECK_RESPONSE',
+      'HEARTBEAT', 'HEALTH_CHECK_RESPONSE', 'BRIDGE_READY',
       // Parent to Iframe
       'TOGGLE_DESIGN_MODE', 'UPDATE_STYLE', 'UPDATE_CONTENT', 'BATCH_UPDATE',
       'GET_ELEMENT_STATE', 'HEALTH_CHECK'
@@ -260,16 +280,16 @@ export class EnhancedBridge implements BridgeInterface {
   /**
    * 发送消息
    */
-  public async send<T extends ParentToIframeMessage>(message: T): Promise<void> {
+  public async send<T extends DesignModeMessage>(message: T): Promise<void> {
     // 更宽松的连接检查
-    if (!this.isConnected && this.isIframeEnvironment()) {
+    if (!this._isConnected && this.isIframeEnvironment()) {
       // 在iframe环境中，如果没有连接，尝试重新连接
       this.log('Bridge not connected, attempting to reconnect...');
       
       // 设置一个短暂的超时来等待连接
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      if (!this.isConnected) {
+      if (!this._isConnected) {
         console.warn('[EnhancedBridge] Bridge still not connected, message will be queued');
         // 不抛出错误，而是记录警告并返回
         return;
@@ -277,7 +297,7 @@ export class EnhancedBridge implements BridgeInterface {
     }
 
     // 在主窗口中，如果没有目标iframe，发送可能会失败但不应该抛出错误
-    if (!this.isConnected && !this.isIframeEnvironment()) {
+    if (!this._isConnected && !this.isIframeEnvironment()) {
       this.log('Running in main window, bridge connection not applicable');
       return;
     }
@@ -307,11 +327,11 @@ export class EnhancedBridge implements BridgeInterface {
   /**
    * 发送消息并等待响应
    */
-  public async sendWithResponse<T extends ParentToIframeMessage, R extends IframeToParentMessage>(
+  public async sendWithResponse<T extends DesignModeMessage, R extends DesignModeMessage>(
     message: T,
     responseType: R['type']
   ): Promise<R> {
-    if (!this.isConnected) {
+    if (!this._isConnected) {
       throw new Error('Bridge is not connected');
     }
 
@@ -348,8 +368,8 @@ export class EnhancedBridge implements BridgeInterface {
    * 增强消息（添加requestId和时间戳）
    */
   private enhanceMessage<T extends DesignModeMessage>(message: T): T & { requestId?: string; timestamp: number } {
-    const requestId = this.generateRequestId();
-    const timestamp = this.createTimestamp();
+    const requestId = (message as any).requestId || this.generateRequestId();
+    const timestamp = (message as any).timestamp || this.createTimestamp();
     
     return {
       ...message,
@@ -376,12 +396,12 @@ export class EnhancedBridge implements BridgeInterface {
    * 发送确认消息
    */
   private sendAcknowledgement(requestId: string) {
-    const acknowledgement = {
+    const acknowledgement: AcknowledgementMessage = {
       type: 'ACKNOWLEDGEMENT',
       payload: {
         messageType: 'UNKNOWN', // 这里应该传入实际的消息类型
-        requestId
       },
+      requestId,
       timestamp: this.createTimestamp()
     };
 
@@ -392,7 +412,7 @@ export class EnhancedBridge implements BridgeInterface {
    * 发送心跳
    */
   private sendHeartbeat() {
-    const heartbeat = {
+    const heartbeat: HeartbeatMessage = {
       type: 'HEARTBEAT',
       payload: {
         timestamp: this.createTimestamp()
@@ -413,11 +433,11 @@ export class EnhancedBridge implements BridgeInterface {
     
     if (timeSinceLastHeartbeat > this.config.heartbeatInterval * 3) {
       this.log('Connection appears to be lost');
-      this.isConnected = false;
+      this._isConnected = false;
       
       // 尝试重新连接
       setTimeout(() => {
-        this.isConnected = true;
+        this._isConnected = true;
         this.log('Connection restored');
       }, 1000);
     }
@@ -465,15 +485,22 @@ export class EnhancedBridge implements BridgeInterface {
   /**
    * 获取连接状态
    */
+  public isConnected(): boolean {
+    return this._isConnected;
+  }
+
+  /**
+   * 获取连接状态 (Alias for backward compatibility if needed)
+   */
   public isConnectedToTarget(): boolean {
-    return this.isConnected;
+    return this._isConnected;
   }
 
   /**
    * 断开连接
    */
   public disconnect(): void {
-    this.isConnected = false;
+    this._isConnected = false;
     
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
@@ -491,7 +518,9 @@ export class EnhancedBridge implements BridgeInterface {
     this.pendingRequests.clear();
     
     // 清理消息监听器
-    window.removeEventListener('message', this.handleMessage.bind(this));
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('message', this.handleMessage.bind(this));
+    }
     this.listeners.clear();
     
     this.log('Bridge disconnected');
@@ -505,7 +534,7 @@ export class EnhancedBridge implements BridgeInterface {
       const env = this.getEnvironmentInfo();
       
       // 基本健康检查
-      if (!env.isIframe && this.isConnected) {
+      if (!env.isIframe && this._isConnected) {
         return {
           status: 'healthy',
           details: {
@@ -515,15 +544,15 @@ export class EnhancedBridge implements BridgeInterface {
         };
       }
       
-      if (env.isIframe && this.isConnected) {
+      if (env.isIframe && this._isConnected) {
         // 在iframe中，尝试发送健康检查请求
         try {
-          const response = await this.sendWithResponse(
+          const response = await this.sendWithResponse<HealthCheckMessage, HealthCheckResponseMessage>(
             {
               type: 'HEALTH_CHECK',
               requestId: '',
               timestamp: this.createTimestamp()
-            } as any,
+            },
             'HEALTH_CHECK_RESPONSE'
           );
 
@@ -586,7 +615,7 @@ export class EnhancedBridge implements BridgeInterface {
 /**
  * 桥接工具函数
  */
-export const MessageUtils: MessageUtils = {
+export const MessageUtils: MessageUtilsInterface = {
   generateRequestId: (): string => {
     return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   },
@@ -603,16 +632,16 @@ export const MessageUtils: MessageUtils = {
 
   createResponse: function<T extends IframeToParentMessage>(
     originalMessage: ParentToIframeMessage,
-    payload: T['payload'],
+    payload: T extends { payload: infer P } ? P : never,
     success: boolean = true,
     error?: string
   ): T {
     return {
-      ...payload,
-      type: payload.type,
-      requestId: originalMessage.requestId!,
+      payload,
+      type: (payload as any)?.type,
+      requestId: (originalMessage as any).requestId || '',
       timestamp: this.createTimestamp()
-    } as T;
+    } as unknown as T;
   }
 };
 
