@@ -184,15 +184,15 @@ export class EnhancedBridge implements BridgeInterface {
    */
   private handleMessage(event: MessageEvent) {
     // 跳过跨域消息（可选的安全措施）
-    if (event.origin !== window.location.origin && window.location.origin !== 'null') {
-      // 允许file://和data://协议的本地文件
-      if (!event.origin.startsWith('http') && !event.origin.startsWith('https')) {
-        this.log('Received message from different origin, allowing:', event.origin);
-      } else {
-        this.log('Skipping message from different origin:', event.origin);
-        return;
-      }
-    }
+    // if (event.origin !== window.location.origin && window.location.origin !== 'null') {
+    //   // 允许file://和data://协议的本地文件
+    //   if (!event.origin.startsWith('http') && !event.origin.startsWith('https')) {
+    //     this.log('Received message from different origin, allowing:', event.origin);
+    //   } else {
+    //     this.log('Skipping message from different origin:', event.origin);
+    //     return;
+    //   }
+    // }
 
     const message = event.data;
     
