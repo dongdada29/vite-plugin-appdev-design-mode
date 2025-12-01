@@ -2,6 +2,9 @@ import type { ViteDevServer } from 'vite';
 import type { DesignModeOptions } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as babel from '@babel/standalone';
+import traverse from '@babel/traverse';
+import * as t from '@babel/types';
 
 export function createServerMiddleware(
   options: Required<DesignModeOptions>,
@@ -51,14 +54,16 @@ export function createServerMiddleware(
 
         default:
           res.statusCode = 404;
-          res.end(JSON.stringify({ error: 'Not found', availableEndpoints: [
-            '/__appdev_design_mode/get-source',
-            '/__appdev_design_mode/modify-source',
-            '/__appdev_design_mode/update',
-            '/__appdev_design_mode/batch-update',
-            '/__appdev_design_mode/get-element-state',
-            '/__appdev_design_mode/health'
-          ]}));
+          res.end(JSON.stringify({
+            error: 'Not found', availableEndpoints: [
+              '/__appdev_design_mode/get-source',
+              '/__appdev_design_mode/modify-source',
+              '/__appdev_design_mode/update',
+              '/__appdev_design_mode/batch-update',
+              '/__appdev_design_mode/get-element-state',
+              '/__appdev_design_mode/health'
+            ]
+          }));
       }
     } catch (error) {
       console.error('[DesignMode] Server middleware error:', error);
@@ -520,7 +525,8 @@ async function handleGetElementState(req: any, res: any, rootDir: string) {
           before: lines[Math.max(0, targetLine - 2)] || '',
           current: lines[targetLine] || '',
           after: lines[Math.min(lines.length - 1, targetLine + 2)] || ''
-        }
+        },
+        isStaticText: await checkForStaticText(filePath, sourceInfo.lineNumber, sourceInfo.columnNumber)
       };
 
       res.statusCode = 200;
@@ -801,7 +807,80 @@ async function smartReplaceInSource(
     lines[targetLine] = newLine;
     return lines.join('\n');
   } catch (error) {
-    throw new Error(`Smart replacement failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('[DesignMode] Smart replace failed:', error);
+    return line; // Fallback to original line
+  }
+}
+
+/**
+ * Check if the element at the given position contains only static text
+ */
+async function checkForStaticText(
+  filePath: string,
+  lineNumber: number,
+  columnNumber: number
+): Promise<boolean> {
+  try {
+    const code = await fs.promises.readFile(filePath, 'utf-8');
+
+    // Parse the code
+    const ast = babel.transform(code, {
+      ast: true,
+      code: false,
+      filename: filePath,
+      presets: ['@babel/preset-typescript', '@babel/preset-react'],
+      parserOpts: {
+        plugins: ['typescript', 'jsx', 'classProperties'],
+        sourceType: 'module'
+      }
+    }).ast;
+
+    if (!ast) return false;
+
+    let isStatic = false;
+    let found = false;
+
+    // Traverse AST to find the element
+    traverse(ast, {
+      JSXOpeningElement(path: any) {
+        if (found) return;
+
+        const node = path.node;
+        if (!node.loc) return;
+
+        // Check if this is the target element
+        // Note: Babel line numbers are 1-based, columns are 0-based
+        if (
+          node.loc.start.line === lineNumber &&
+          node.loc.start.column === columnNumber
+        ) {
+          found = true;
+          const element = path.parent; // JSXElement
+
+          if (t.isJSXElement(element)) {
+            // Check children
+            isStatic = element.children.every(child => {
+              // Allow plain text
+              if (t.isJSXText(child)) return true;
+
+              // Allow expression containers with literals
+              if (t.isJSXExpressionContainer(child)) {
+                const expr = child.expression;
+                return t.isStringLiteral(expr) || t.isNumericLiteral(expr);
+              }
+
+              // Disallow everything else (nested elements, variables, function calls, etc.)
+              return false;
+            });
+          }
+        }
+      }
+    });
+
+    return found && isStatic;
+  } catch (error) {
+    console.error('[DesignMode] Static text check failed:', error);
+    return false; // Fail safe
   }
 }
 

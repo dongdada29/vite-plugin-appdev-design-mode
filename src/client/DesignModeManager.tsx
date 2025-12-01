@@ -1,8 +1,13 @@
 import React, { useEffect } from 'react';
 import { useDesignMode } from './DesignModeContext';
+import { useUpdateManager } from './UpdateManager';
 
 export const DesignModeManager: React.FC = () => {
   const { isDesignMode, selectElement, selectedElement, updateElementContent } = useDesignMode();
+
+  // Initialize UpdateManager to enable context menu and direct editing features
+  useUpdateManager();
+
 
   useEffect(() => {
     if (!isDesignMode) {

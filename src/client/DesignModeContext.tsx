@@ -480,6 +480,35 @@ export const DesignModeProvider: React.FC<{
           return;
         }
 
+        // Check if it's pure static text (using server-side AST check)
+        try {
+          const response = await fetch('/__appdev_design_mode/get-element-state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sourceInfo }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (!data.elementState?.isStaticText) {
+              console.warn('[DesignMode] Cannot update content of non-static text element (AST check)');
+              sendToParent({
+                type: 'ERROR',
+                payload: {
+                  code: 'CONTENT_UPDATE_FAILED',
+                  message: 'Cannot update content of dynamic/complex element',
+                  details: { sourceInfo },
+                },
+                timestamp: Date.now(),
+              });
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('[DesignMode] Failed to check if element is static text:', error);
+          // Continue anyway - fail open
+        }
+
         const originalContent = element.innerText || element.textContent || '';
         console.log(
           '[DesignMode] Found element:',
@@ -651,7 +680,7 @@ export const DesignModeProvider: React.FC<{
    * 元素选择处理
    */
   const selectElement = useCallback(
-    (element: HTMLElement | null) => {
+    async (element: HTMLElement | null) => {
       setSelectedElement(element);
 
       // 发送选择信息到父窗口（仅在iframe环境下）
@@ -660,10 +689,29 @@ export const DesignModeProvider: React.FC<{
         if (sourceInfoStr) {
           try {
             const sourceInfo = JSON.parse(sourceInfoStr);
+
+            // Check if element has static text
+            let isStaticText = false;
+            try {
+              const response = await fetch('/__appdev_design_mode/get-element-state', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sourceInfo }),
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+                isStaticText = data.elementState?.isStaticText || false;
+              }
+            } catch (error) {
+              console.warn('[DesignMode] Failed to check static text:', error);
+            }
+
             const elementInfo: ElementInfo = {
               tagName: element.tagName.toLowerCase(),
               className: element.className,
               textContent: element.innerText || element.textContent || '',
+              isStaticText,
               sourceInfo: {
                 fileName: sourceInfo.fileName,
                 lineNumber: sourceInfo.lineNumber,
@@ -844,6 +892,29 @@ export const DesignModeProvider: React.FC<{
    */
   const updateElementContent = useCallback(
     async (element: HTMLElement, newContent: string) => {
+      const sourceInfo = extractSourceInfo(element);
+      if (sourceInfo) {
+        // Check if it's pure static text (using server-side AST check)
+        try {
+          const response = await fetch('/__appdev_design_mode/get-element-state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sourceInfo }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (!data.elementState?.isStaticText) {
+              console.warn('[DesignMode] Cannot update content of non-static text element (AST check)');
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('[DesignMode] Failed to check if element is static text:', error);
+          // Continue anyway - fail open
+        }
+      }
+
       const originalContent = element.innerText;
 
       console.log('[DesignMode] Updating content:', {

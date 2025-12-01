@@ -11,6 +11,7 @@ export interface ElementInfo {
   className: string;
   textContent: string;
   sourceInfo: SourceInfo;
+  isStaticText?: boolean;
 }
 
 // 消息验证相关类型
@@ -127,6 +128,20 @@ export interface BatchUpdateMessage {
   timestamp?: number;
 }
 
+// Add to Chat Message
+export interface AddToChatMessage {
+  type: 'ADD_TO_CHAT';
+  payload: {
+    content: string;
+    context?: {
+      elementInfo?: ElementInfo;
+      sourceInfo?: SourceInfo;
+    };
+  };
+  requestId?: string;
+  timestamp?: number;
+}
+
 // 新增：状态查询和响应消息
 export interface GetElementStateMessage {
   type: 'GET_ELEMENT_STATE';
@@ -148,6 +163,7 @@ export interface ElementStateResponseMessage {
       newValue: string;
       timestamp: number;
     }>;
+    isStaticText?: boolean;
   };
   requestId: string; // Response MUST have requestId to match request
   timestamp?: number;
@@ -221,7 +237,8 @@ export type IframeToParentMessage =
   | AcknowledgementMessage
   | HeartbeatMessage
   | HealthCheckResponseMessage
-  | BridgeReadyMessage;
+  | BridgeReadyMessage
+  | AddToChatMessage;
 
 export type ParentToIframeMessage =
   | ToggleDesignModeMessage

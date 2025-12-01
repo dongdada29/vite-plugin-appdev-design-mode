@@ -82,6 +82,10 @@ export class UpdateManager {
   private saveTimer: NodeJS.Timeout | null = null;
   private observer: MutationObserver | null = null;
 
+  // Design mode state
+  private isDesignMode: boolean = false;
+  private selectedElement: HTMLElement | null = null;
+
   constructor(
     private config: UpdateManagerConfig = {
       enableDirectEdit: true,
@@ -165,6 +169,13 @@ export class UpdateManager {
   }
 
   /**
+   * Check if element contains only pure static text (no child elements)
+   */
+  private isPureStaticText(element: HTMLElement): boolean {
+    return element.children.length === 0;
+  }
+
+  /**
    * 处理双击事件
    */
   private handleDblClick(event: MouseEvent) {
@@ -175,6 +186,12 @@ export class UpdateManager {
     event.preventDefault();
     event.stopPropagation();
 
+    // Check if it's pure static text
+    if (!this.isPureStaticText(target)) {
+      console.log('[UpdateManager] Ignored dblclick on non-static text element');
+      return;
+    }
+
     // 进入编辑模式
     this.enterEditMode(target, 'content');
   }
@@ -184,6 +201,13 @@ export class UpdateManager {
    */
   private handleContextMenu(event: MouseEvent) {
     const target = event.target as HTMLElement;
+
+    // Only show context menu if design mode is enabled
+    if (!this.isDesignMode) return;
+
+    // Only show context menu if the target is the currently selected element
+    if (!this.selectedElement || target !== this.selectedElement) return;
+
     if (!this.hasSourceMapping(target)) return;
 
     event.preventDefault();
@@ -191,6 +215,15 @@ export class UpdateManager {
     // 显示自定义上下文菜单或触发编辑
     this.showContextMenu(target, event.clientX, event.clientY);
   }
+
+  /**
+   * Update design mode state
+   */
+  public setDesignModeState(isDesignMode: boolean, selectedElement: HTMLElement | null = null) {
+    this.isDesignMode = isDesignMode;
+    this.selectedElement = selectedElement;
+  }
+
 
   /**
    * 处理键盘按键
@@ -201,7 +234,11 @@ export class UpdateManager {
       const selectedElement = document.activeElement as HTMLElement;
       if (selectedElement && this.hasSourceMapping(selectedElement)) {
         event.preventDefault();
-        this.enterEditMode(selectedElement, 'content');
+        if (this.isPureStaticText(selectedElement)) {
+          this.enterEditMode(selectedElement, 'content');
+        } else {
+          console.log('[UpdateManager] Cannot edit non-static text element');
+        }
       }
     }
 
@@ -315,7 +352,31 @@ export class UpdateManager {
   /**
    * 编辑文本内容
    */
-  private editTextContent(element: HTMLElement) {
+  private async editTextContent(element: HTMLElement) {
+    const sourceInfo = this.extractSourceInfo(element);
+    if (!sourceInfo) return;
+
+    // Check if element has static text
+    try {
+      const response = await fetch('/__appdev_design_mode/get-element-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceInfo }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.elementState?.isStaticText) {
+          console.warn('[UpdateManager] Cannot edit non-static text element');
+          alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('[UpdateManager] Failed to check if element is static text:', error);
+      return;
+    }
+
     const originalText = element.innerText;
     const textArea = document.createElement('textarea');
 
@@ -428,11 +489,17 @@ export class UpdateManager {
       {
         label: '编辑文本',
         action: () => this.enterEditMode(element, 'content'),
+        disabled: !this.isPureStaticText(element),
       },
       { label: '编辑样式', action: () => this.enterEditMode(element, 'style') },
       {
         label: '编辑属性',
         action: () => this.enterEditMode(element, 'attribute'),
+      },
+      { label: '---', action: () => { }, disabled: true }, // Divider
+      {
+        label: 'Add to Chat',
+        action: () => this.addToChat(element),
       },
       { label: '复制元素', action: () => this.copyElement(element) },
       { label: '删除元素', action: () => this.deleteElement(element) },
@@ -442,7 +509,15 @@ export class UpdateManager {
       const menuItem = document.createElement('div');
       menuItem.textContent = item.label;
       menuItem.style.padding = '8px 16px';
-      menuItem.style.cursor = 'pointer';
+
+      if ((item as any).disabled) {
+        menuItem.style.color = '#999';
+        menuItem.style.cursor = 'not-allowed';
+      } else {
+        menuItem.style.cursor = 'pointer';
+        menuItem.style.color = '#333';
+      }
+
       menuItem.style.background = 'transparent';
 
       menuItem.addEventListener('mouseenter', () => {
@@ -454,6 +529,7 @@ export class UpdateManager {
       });
 
       menuItem.addEventListener('click', () => {
+        if ((item as any).disabled) return;
         item.action();
         document.body.removeChild(menu);
       });
@@ -484,6 +560,35 @@ export class UpdateManager {
     const clone = element.cloneNode(true) as HTMLElement;
     document.body.appendChild(clone);
     console.log('[UpdateManager] Element copied:', clone);
+  }
+
+  /**
+   * Add element content to chat
+   */
+  private addToChat(element: HTMLElement) {
+    const sourceInfo = this.extractSourceInfo(element);
+    const content = element.innerText || element.textContent || '';
+
+    console.log('[UpdateManager] Adding to chat:', { content, sourceInfo });
+
+    // Send ADD_TO_CHAT message via window postMessage
+    window.postMessage({
+      type: 'ADD_TO_CHAT',
+      payload: {
+        content,
+        context: {
+          sourceInfo,
+          elementInfo: {
+            tagName: element.tagName.toLowerCase(),
+            className: element.className,
+            textContent: content
+          }
+        }
+      },
+      timestamp: Date.now()
+    }, '*');
+
+    alert(`已添加到聊天:\n\n${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
   }
 
   /**
@@ -1015,7 +1120,7 @@ export class UpdateManager {
 export const useUpdateManager = (config?: Partial<UpdateManagerConfig>) => {
   const updateManagerRef = useRef<UpdateManager | null>(null);
   const [updateStates, setUpdateStates] = useState<UpdateState[]>([]);
-  const { config: designModeConfig } = useDesignMode();
+  const { config: designModeConfig, isDesignMode, selectedElement } = useDesignMode();
 
   React.useEffect(() => {
     updateManagerRef.current = new UpdateManager({
@@ -1047,6 +1152,14 @@ export const useUpdateManager = (config?: Partial<UpdateManagerConfig>) => {
       updateManagerRef.current = null;
     };
   }, [designModeConfig]);
+
+  // Sync design mode state and selected element with UpdateManager
+  React.useEffect(() => {
+    if (updateManagerRef.current) {
+      updateManagerRef.current.setDesignModeState(isDesignMode, selectedElement);
+    }
+  }, [isDesignMode, selectedElement]);
+
 
   return {
     updateManager: updateManagerRef.current,
