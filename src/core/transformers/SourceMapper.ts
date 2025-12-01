@@ -1,7 +1,7 @@
 import * as babel from '@babel/standalone';
 import traverse from '@babel/traverse';
 import * as t from '@babel/types';
-import type { DesignModeOptions } from '../types';
+import type { DesignModeOptions } from '../../types';
 
 export interface SourceMappingInfo {
   fileName: string;

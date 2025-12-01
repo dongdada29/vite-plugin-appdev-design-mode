@@ -1,6 +1,6 @@
 import type { Plugin } from 'vite';
 import { createServerMiddleware } from './core/serverMiddleware';
-import { transformSourceCode } from './core/astTransformer';
+import { transformSourceCode } from './core/transformers/ASTTransformer';
 import { handleUpdate } from './core/codeUpdater';
 import { handleBatchUpdate } from './core/batchUpdater';
 

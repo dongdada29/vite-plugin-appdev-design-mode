@@ -5,6 +5,7 @@ import * as path from 'path';
 import { validateUpdateRequest, ValidationResult } from './utils/validation';
 import { checkForStaticText } from './utils/astUtils';
 import { readBody, readFile, writeFile, fileExists } from './utils/fileUtils';
+import { smartReplaceInSource } from './transformers/StyleTransformer';
 
 export function createServerMiddleware(
   options: Required<DesignModeOptions>,
@@ -200,8 +201,7 @@ async function handleModifySource(req: any, res: any, rootDir: string) {
           newValue: newStyles,
           originalValue: oldStyles || '',
           type: 'style',
-        },
-        rootDir
+        }
       );
 
       // 写回文件
@@ -305,8 +305,7 @@ async function handleUpdate(req: any, res: any, rootDir: string) {
           newValue,
           originalValue,
           type
-        },
-        rootDir
+        }
       );
 
       // 创建备份
@@ -766,110 +765,14 @@ function parseElementId(
   };
 }
 
-// 智能替换源码
-async function smartReplaceInSource(
-  content: string,
-  options: {
-    lineNumber: number;
-    columnNumber: number;
-    newValue: string;
-    originalValue?: string;
-    type: 'style' | 'content' | 'attribute';
-  },
-  rootDir: string
-): Promise<string> {
-  const lines = content.split('\n');
-  const targetLine = Math.max(0, options.lineNumber - 1);
 
-  if (targetLine >= lines.length) {
-    throw new Error(`Line ${options.lineNumber} exceeds file length`);
-  }
-
-  const line = lines[targetLine];
-  let newLine = line;
-
-  try {
-    switch (options.type) {
-      case 'style':
-        // 处理样式更新
-        newLine = await smartReplaceStyle(line, options);
-        break;
-      case 'content':
-        // 处理内容更新
-        newLine = await smartReplaceContent(line, options);
-        break;
-      case 'attribute':
-        // 处理属性更新
-        newLine = await smartReplaceAttribute(line, options);
-        break;
-    }
-
-    lines[targetLine] = newLine;
-    return lines.join('\n');
-  } catch (error) {
-    console.error('[DesignMode] Smart replace failed:', error);
-    return line; // Fallback to original line
-  }
-}
 
 /**
  * Check if the element at the given position contains only static text
  */
 
 
-// 智能样式替换
-async function smartReplaceStyle(line: string, options: any): Promise<string> {
-  // 这里可以实现更复杂的样式替换逻辑
-  // 比如使用AST解析或者正则表达式匹配
-  if (options.originalValue && line.includes(options.originalValue)) {
-    return line.replace(
-      new RegExp(escapeRegExp(options.originalValue), 'g'),
-      options.newValue
-    );
-  }
 
-  // 如果没有原始值，使用列号信息进行更精确的替换
-  const parts = line.split('=');
-  if (parts.length >= 2) {
-    const attributeName = parts[0].trim();
-    const attributeValue = parts.slice(1).join('=').trim();
-    const newAttributeValue = options.newValue;
-
-    if (attributeName === 'className') {
-      return `${attributeName}={${newAttributeValue}}`;
-    }
-  }
-
-  return options.newValue;
-}
-
-// 智能内容替换
-async function smartReplaceContent(line: string, options: any): Promise<string> {
-  // 对于React JSX内容，可以使用更精确的替换
-  if (options.originalValue && line.includes(options.originalValue)) {
-    return line.replace(
-      new RegExp(escapeRegExp(options.originalValue), 'g'),
-      options.newValue
-    );
-  }
-
-  // 如果在标签内容中，尝试替换标签内容部分
-  const contentMatch = line.match(/>([^<]*)</);
-  if (contentMatch && contentMatch[1] === options.originalValue) {
-    return line.replace(contentMatch[0], `>${options.newValue}<`);
-  }
-
-  return options.newValue;
-}
-
-// 智能属性替换
-async function smartReplaceAttribute(line: string, options: any): Promise<string> {
-  // 实现属性替换逻辑
-  return line.replace(
-    new RegExp(`${options.attributeName}="[^"]*"`),
-    `${options.attributeName}="${options.newValue}"`
-  );
-}
 
 // 验证更新请求
 
@@ -897,8 +800,7 @@ async function processSingleUpdate(update: any, rootDir: string, batchId: string
         newValue: update.newValue,
         originalValue: update.originalValue,
         type: update.type
-      },
-      rootDir
+      }
     );
 
     // 创建备份
