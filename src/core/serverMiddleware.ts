@@ -2,9 +2,9 @@ import type { ViteDevServer } from 'vite';
 import type { DesignModeOptions } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as babel from '@babel/standalone';
-import traverse from '@babel/traverse';
-import * as t from '@babel/types';
+import { validateUpdateRequest, ValidationResult } from './utils/validation';
+import { checkForStaticText } from './utils/astUtils';
+import { readBody, readFile, writeFile, fileExists } from './utils/fileUtils';
 
 export function createServerMiddleware(
   options: Required<DesignModeOptions>,
@@ -815,74 +815,7 @@ async function smartReplaceInSource(
 /**
  * Check if the element at the given position contains only static text
  */
-async function checkForStaticText(
-  filePath: string,
-  lineNumber: number,
-  columnNumber: number
-): Promise<boolean> {
-  try {
-    const code = await fs.promises.readFile(filePath, 'utf-8');
 
-    // Parse the code
-    const ast = babel.transform(code, {
-      ast: true,
-      code: false,
-      filename: filePath,
-      presets: ['@babel/preset-typescript', '@babel/preset-react'],
-      parserOpts: {
-        plugins: ['typescript', 'jsx', 'classProperties'],
-        sourceType: 'module'
-      }
-    }).ast;
-
-    if (!ast) return false;
-
-    let isStatic = false;
-    let found = false;
-
-    // Traverse AST to find the element
-    traverse(ast, {
-      JSXOpeningElement(path: any) {
-        if (found) return;
-
-        const node = path.node;
-        if (!node.loc) return;
-
-        // Check if this is the target element
-        // Note: Babel line numbers are 1-based, columns are 0-based
-        if (
-          node.loc.start.line === lineNumber &&
-          node.loc.start.column === columnNumber
-        ) {
-          found = true;
-          const element = path.parent; // JSXElement
-
-          if (t.isJSXElement(element)) {
-            // Check children
-            isStatic = element.children.every(child => {
-              // Allow plain text
-              if (t.isJSXText(child)) return true;
-
-              // Allow expression containers with literals
-              if (t.isJSXExpressionContainer(child)) {
-                const expr = child.expression;
-                return t.isStringLiteral(expr) || t.isNumericLiteral(expr);
-              }
-
-              // Disallow everything else (nested elements, variables, function calls, etc.)
-              return false;
-            });
-          }
-        }
-      }
-    });
-
-    return found && isStatic;
-  } catch (error) {
-    console.error('[DesignMode] Static text check failed:', error);
-    return false; // Fail safe
-  }
-}
 
 // 智能样式替换
 async function smartReplaceStyle(line: string, options: any): Promise<string> {
@@ -939,36 +872,7 @@ async function smartReplaceAttribute(line: string, options: any): Promise<string
 }
 
 // 验证更新请求
-async function validateUpdateRequest(update: any, rootDir: string): Promise<{ valid: boolean; errors: string[] }> {
-  const errors: string[] = [];
 
-  // 检查必要字段
-  if (!update.filePath) errors.push('Missing filePath');
-  if (update.line === undefined) errors.push('Missing line');
-  if (update.column === undefined) errors.push('Missing column');
-  if (update.newValue === undefined) errors.push('Missing newValue');
-  if (!update.type) errors.push('Missing type');
-
-  // 检查文件路径
-  if (update.filePath) {
-    const fullPath = path.resolve(rootDir, update.filePath);
-    try {
-      await fs.promises.access(fullPath, fs.constants.F_OK);
-    } catch {
-      errors.push(`File not found: ${update.filePath}`);
-    }
-  }
-
-  // 检查更新类型
-  if (update.type && !['style', 'content', 'attribute'].includes(update.type)) {
-    errors.push(`Invalid update type: ${update.type}`);
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  };
-}
 
 // 处理单个更新
 async function processSingleUpdate(update: any, rootDir: string, batchId: string): Promise<any> {
