@@ -1,6 +1,9 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useDesignMode } from './DesignModeContext';
 import { SourceInfo, ElementInfo } from '../types/messages';
+import { extractSourceInfo, hasSourceMapping } from './utils/sourceInfo';
+import { isPureStaticText } from './utils/elementUtils';
+import { showContextMenu, closeContextMenu, MenuItem } from './ui/ContextMenu';
 
 /**
  * 更新操作类型
@@ -138,7 +141,7 @@ export class UpdateManager {
         } else if (mutation.type === 'characterData') {
           // 处理文本内容变化
           const target = mutation.target.parentElement as HTMLElement;
-          if (target && this.hasSourceMapping(target)) {
+          if (target && hasSourceMapping(target)) {
             // Double check ignore attribute for text node parent
             if (target.hasAttribute('data-ignore-mutation')) {
                 console.log('[UpdateManager] Ignoring characterData mutation', target);
@@ -150,7 +153,7 @@ export class UpdateManager {
         } else if (mutation.type === 'attributes') {
           // 处理属性变化（样式、class等）
           const target = mutation.target as HTMLElement;
-          if (target && this.hasSourceMapping(target)) {
+          if (target && hasSourceMapping(target)) {
             const attributeName = mutation.attributeName;
             const newValue = target.getAttribute(attributeName!);
             const oldValue = mutation.oldValue;
@@ -208,26 +211,21 @@ export class UpdateManager {
     document.addEventListener('keydown', this.handleKeyDown.bind(this));
   }
 
-  /**
-   * Check if element contains only pure static text (no child elements)
-   */
-  private isPureStaticText(element: HTMLElement): boolean {
-    return element.children.length === 0;
-  }
+
 
   /**
    * 处理双击事件
    */
   private handleDblClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
-    if (!this.hasSourceMapping(target)) return;
+    if (!hasSourceMapping(target)) return;
 
     // 防止默认行为
     event.preventDefault();
     event.stopPropagation();
 
     // Check if it's pure static text
-    if (!this.isPureStaticText(target)) {
+    if (!isPureStaticText(target)) {
       console.log('[UpdateManager] Ignored dblclick on non-static text element');
       return;
     }
@@ -248,7 +246,7 @@ export class UpdateManager {
     // Only show context menu if the target is the currently selected element
     if (!this.selectedElement || target !== this.selectedElement) return;
 
-    if (!this.hasSourceMapping(target)) return;
+    if (!hasSourceMapping(target)) return;
 
     event.preventDefault();
 
@@ -272,9 +270,9 @@ export class UpdateManager {
     // F2键进入编辑模式
     if (event.key === 'F2') {
       const selectedElement = document.activeElement as HTMLElement;
-      if (selectedElement && this.hasSourceMapping(selectedElement)) {
+      if (selectedElement && hasSourceMapping(selectedElement)) {
         event.preventDefault();
-        if (this.isPureStaticText(selectedElement)) {
+        if (isPureStaticText(selectedElement)) {
           this.enterEditMode(selectedElement, 'content');
         } else {
           console.log('[UpdateManager] Cannot edit non-static text element');
@@ -312,7 +310,7 @@ export class UpdateManager {
    * 设置元素的编辑处理器
    */
   private setupElementEditHandlers(element: HTMLElement) {
-    if (!this.hasSourceMapping(element)) return;
+    if (!hasSourceMapping(element)) return;
 
     // 为元素添加可编辑指示器
     element.setAttribute('data-edit-enabled', 'true');
@@ -331,15 +329,7 @@ export class UpdateManager {
     });
   }
 
-  /**
-   * 检查元素是否有源码映射
-   */
-  private hasSourceMapping(element: HTMLElement): boolean {
-    return !!(
-      element.getAttribute('data-source-file') ||
-      element.getAttribute('data-source-info')
-    );
-  }
+
 
   /**
    * 处理直接编辑
@@ -350,7 +340,7 @@ export class UpdateManager {
   ) {
     if (!this.config.enableDirectEdit) return;
 
-    const sourceInfo = this.extractSourceInfo(element);
+    const sourceInfo = extractSourceInfo(element);
     if (!sourceInfo) return;
 
     switch (type) {
@@ -370,7 +360,7 @@ export class UpdateManager {
     element: HTMLElement,
     type: 'style' | 'content' | 'attribute'
   ) {
-    const sourceInfo = this.extractSourceInfo(element);
+    const sourceInfo = extractSourceInfo(element);
     if (!sourceInfo) {
       console.warn('[UpdateManager] Element has no source mapping');
       return;
@@ -393,7 +383,7 @@ export class UpdateManager {
    * 编辑文本内容
    */
   private async editTextContent(element: HTMLElement) {
-    const sourceInfo = this.extractSourceInfo(element);
+    const sourceInfo = extractSourceInfo(element);
     if (!sourceInfo) return;
 
     // Check if element has static text
@@ -450,7 +440,7 @@ export class UpdateManager {
       const newText = textArea.value;
       if (newText !== originalText) {
         element.innerText = newText;
-        this.updateContent(element, newText, this.extractSourceInfo(element)!);
+        this.updateContent(element, newText, extractSourceInfo(element)!);
       }
       this.exitEditMode(textArea);
     };
@@ -481,7 +471,7 @@ export class UpdateManager {
     this.notifyCallbacks('class_update', {
       id: this.generateUpdateId(),
       operation: 'class_update' as UpdateOperation,
-      sourceInfo: this.extractSourceInfo(element)!,
+      sourceInfo: extractSourceInfo(element)!,
       element,
       oldValue: element.className,
       newValue: element.className,
@@ -512,90 +502,15 @@ export class UpdateManager {
    * 显示上下文菜单
    */
   private showContextMenu(element: HTMLElement, x: number, y: number) {
-    // 如果已经存在菜单，先关闭它
-    const existingMenu = document.querySelector('[data-context-menu="true"]') as HTMLElement;
-    if (existingMenu) {
-      document.body.removeChild(existingMenu);
-    }
-
-    // 创建上下文菜单
-    const menu = document.createElement('div');
-    menu.setAttribute('data-context-menu', 'true');
-    menu.style.position = 'fixed';
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
-    menu.style.background = 'white';
-    menu.style.border = '1px solid #ccc';
-    menu.style.borderRadius = '4px';
-    menu.style.padding = '4px 0';
-    menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-    menu.style.zIndex = '10000';
-    menu.style.minWidth = '150px';
-
-    // 菜单项
-    // 菜单项
-    const menuItems = [
+    const menuItems: MenuItem[] = [
       {
         label: 'Add to Chat',
         action: () => this.addToChat(element),
       },
       { label: '复制元素', action: () => this.copyElement(element) },
-      // { label: '删除元素', action: () => this.deleteElement(element) },
     ];
 
-    menuItems.forEach(item => {
-      const menuItem = document.createElement('div');
-      menuItem.textContent = item.label;
-      menuItem.style.padding = '8px 16px';
-
-      if ((item as any).disabled) {
-        menuItem.style.color = '#999';
-        menuItem.style.cursor = 'not-allowed';
-      } else {
-        menuItem.style.cursor = 'pointer';
-        menuItem.style.color = '#333';
-      }
-
-      menuItem.style.background = 'transparent';
-
-      menuItem.addEventListener('mouseenter', () => {
-        if (!(item as any).disabled) {
-          menuItem.style.background = '#f0f0f0';
-        }
-      });
-
-      menuItem.addEventListener('mouseleave', () => {
-        menuItem.style.background = 'transparent';
-      });
-
-      menuItem.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if ((item as any).disabled) return;
-        item.action();
-        this.closeContextMenu(menu);
-      });
-
-      menu.appendChild(menuItem);
-    });
-
-    // 添加到页面
-    document.body.appendChild(menu);
-
-    // 确保菜单在视口内
-    const rect = menu.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    if (rect.right > viewportWidth) {
-      menu.style.left = (viewportWidth - rect.width - 10) + 'px';
-    }
-    if (rect.bottom > viewportHeight) {
-      menu.style.top = (viewportHeight - rect.height - 10) + 'px';
-    }
-
-    // 使用更完善的 clickoutside 处理
-    this.setupContextMenuCloseHandlers(menu);
+    showContextMenu(element, x, y, menuItems);
   }
 
   /**
@@ -677,7 +592,7 @@ export class UpdateManager {
    * 复制元素
    */
   private copyElement(element: HTMLElement) {
-    const sourceInfo = this.extractSourceInfo(element);
+    const sourceInfo = extractSourceInfo(element);
     const content = element.innerText || element.textContent || '';
 
     // Copy element to clipboard (if possible)
@@ -718,7 +633,7 @@ export class UpdateManager {
    * Add element content to chat
    */
   private addToChat(element: HTMLElement) {
-    const sourceInfo = this.extractSourceInfo(element);
+    const sourceInfo = extractSourceInfo(element);
     const content = element.innerText || element.textContent || '';
 
     console.log('[UpdateManager] Adding to chat:', { content, sourceInfo });
@@ -1106,36 +1021,7 @@ export class UpdateManager {
   /**
    * 提取源码信息
    */
-  private extractSourceInfo(element: HTMLElement): SourceInfo | null {
-    const sourceInfoStr = element.getAttribute('data-source-info');
-    if (sourceInfoStr) {
-      try {
-        const sourceInfo = JSON.parse(sourceInfoStr);
-        return {
-          fileName: sourceInfo.fileName,
-          lineNumber: sourceInfo.lineNumber,
-          columnNumber: sourceInfo.columnNumber,
-        };
-      } catch (e) {
-        console.warn('[UpdateManager] Failed to parse source info:', e);
-      }
-    }
 
-    // 备用方案
-    const fileName = element.getAttribute('data-source-file');
-    const lineStr = element.getAttribute('data-source-line');
-    const columnStr = element.getAttribute('data-source-column');
-
-    if (fileName && lineStr && columnStr) {
-      return {
-        fileName,
-        lineNumber: parseInt(lineStr, 10),
-        columnNumber: parseInt(columnStr, 10),
-      };
-    }
-
-    return null;
-  }
 
   /**
    * 生成更新ID
