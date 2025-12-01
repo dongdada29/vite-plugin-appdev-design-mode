@@ -533,24 +533,14 @@ export class UpdateManager {
     menu.style.minWidth = '150px';
 
     // 菜单项
+    // 菜单项
     const menuItems = [
-      {
-        label: '编辑文本',
-        action: () => this.enterEditMode(element, 'content'),
-        disabled: !this.isPureStaticText(element),
-      },
-      { label: '编辑样式', action: () => this.enterEditMode(element, 'style') },
-      {
-        label: '编辑属性',
-        action: () => this.enterEditMode(element, 'attribute'),
-      },
-      { label: '---', action: () => { }, disabled: true }, // Divider
       {
         label: 'Add to Chat',
         action: () => this.addToChat(element),
       },
       { label: '复制元素', action: () => this.copyElement(element) },
-      { label: '删除元素', action: () => this.deleteElement(element) },
+      // { label: '删除元素', action: () => this.deleteElement(element) },
     ];
 
     menuItems.forEach(item => {
@@ -579,6 +569,7 @@ export class UpdateManager {
       });
 
       menuItem.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
         if ((item as any).disabled) return;
         item.action();
@@ -620,6 +611,9 @@ export class UpdateManager {
     const handleClickOutside = (e: MouseEvent) => {
       // 检查点击是否在菜单外部
       if (!menu.contains(e.target as Node)) {
+        // Prevent event from bubbling to avoid deselecting element
+        e.preventDefault();
+        e.stopPropagation();
         closeMenu();
       }
     };
@@ -683,9 +677,41 @@ export class UpdateManager {
    * 复制元素
    */
   private copyElement(element: HTMLElement) {
-    const clone = element.cloneNode(true) as HTMLElement;
-    document.body.appendChild(clone);
-    console.log('[UpdateManager] Element copied:', clone);
+    const sourceInfo = this.extractSourceInfo(element);
+    const content = element.innerText || element.textContent || '';
+
+    // Copy element to clipboard (if possible)
+    const elementInfo = {
+      tagName: element.tagName.toLowerCase(),
+      className: element.className,
+      content: content,
+      sourceInfo: sourceInfo
+    };
+
+    const textToCopy = JSON.stringify(elementInfo, null, 2);
+
+    // Try to copy to clipboard
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        let alertMessage = '已复制元素信息到剪贴板:\n\n';
+        if (sourceInfo) {
+          alertMessage += `文件: ${sourceInfo.fileName}\n`;
+          alertMessage += `位置: L${sourceInfo.lineNumber}\n`;
+          alertMessage += `\n`;
+        }
+        alertMessage += `标签: <${elementInfo.tagName}>\n`;
+        alertMessage += `类名: ${elementInfo.className}\n`;
+        alertMessage += `内容: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`;
+
+        alert(alertMessage);
+      }).catch(err => {
+        console.error('[UpdateManager] Failed to copy to clipboard:', err);
+        alert('复制失败，请查看控制台');
+      });
+    } else {
+      console.log('[UpdateManager] Element info:', elementInfo);
+      alert('浏览器不支持剪贴板 API，信息已输出到控制台');
+    }
   }
 
   /**
@@ -714,7 +740,16 @@ export class UpdateManager {
       timestamp: Date.now()
     }, '*');
 
-    alert(`已添加到聊天:\n\n${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+    // Format alert message with source info
+    let alertMessage = '已添加到聊天:\n\n';
+    if (sourceInfo) {
+      alertMessage += `文件: ${sourceInfo.fileName}\n`;
+      alertMessage += `位置: L${sourceInfo.lineNumber}\n`;
+      alertMessage += `\n`;
+    }
+    alertMessage += `内容:\n${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`;
+
+    alert(alertMessage);
   }
 
   /**

@@ -24,6 +24,9 @@ export const DesignModeManager: React.FC = () => {
       // OR we need to check if target is part of our UI.
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
 
+      // Don't handle clicks on context menu
+      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
+
       e.preventDefault();
       e.stopPropagation();
 
