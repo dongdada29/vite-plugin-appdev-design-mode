@@ -114,6 +114,20 @@ export class UpdateManager {
     this.observer = new MutationObserver(mutations => {
       // 处理直接编辑的DOM变化
       mutations.forEach(mutation => {
+        // Check if the mutation should be ignored
+        const targetNode = mutation.target;
+        const targetElement = targetNode.nodeType === Node.ELEMENT_NODE
+          ? targetNode as HTMLElement
+          : targetNode.parentElement;
+
+        if (targetElement && targetElement.hasAttribute('data-ignore-mutation')) {
+          console.log('[UpdateManager] Ignoring mutation due to data-ignore-mutation', {
+            type: mutation.type,
+            target: targetElement
+          });
+          return;
+        }
+
         if (mutation.type === 'childList') {
           // 处理元素添加/删除
           mutation.addedNodes.forEach(node => {
@@ -125,15 +139,41 @@ export class UpdateManager {
           // 处理文本内容变化
           const target = mutation.target.parentElement as HTMLElement;
           if (target && this.hasSourceMapping(target)) {
+            // Double check ignore attribute for text node parent
+            if (target.hasAttribute('data-ignore-mutation')) {
+                console.log('[UpdateManager] Ignoring characterData mutation', target);
+                return;
+            }
+            console.log('[UpdateManager] Processing characterData mutation', target);
             this.handleDirectEdit(target, 'content');
           }
         } else if (mutation.type === 'attributes') {
           // 处理属性变化（样式、class等）
           const target = mutation.target as HTMLElement;
           if (target && this.hasSourceMapping(target)) {
-            if (mutation.attributeName === 'class') {
+            const attributeName = mutation.attributeName;
+            const newValue = target.getAttribute(attributeName!);
+            const oldValue = mutation.oldValue;
+
+            if (newValue === oldValue) {
+                console.log('[UpdateManager] Ignoring attribute mutation with same value', { attributeName, value: newValue });
+                return;
+            }
+
+            if (attributeName === 'class') {
+              console.log('[UpdateManager] Processing class mutation', {
+                target,
+                oldValue,
+                newValue,
+                diff: oldValue !== newValue
+              });
               this.handleDirectEdit(target, 'style');
-            } else if (mutation.attributeName?.startsWith('style')) {
+            } else if (attributeName?.startsWith('style')) {
+              console.log('[UpdateManager] Processing style mutation', {
+                target,
+                oldValue,
+                newValue
+              });
               this.handleDirectEdit(target, 'style');
             }
           }

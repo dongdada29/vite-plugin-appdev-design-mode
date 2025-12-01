@@ -341,7 +341,13 @@ export const DesignModeProvider: React.FC<{
         );
 
         // 应用样式更新
+        element.setAttribute('data-ignore-mutation', 'true');
         element.className = newClass;
+        // Use setTimeout to ensure MutationObserver sees the attribute
+        setTimeout(() => {
+            element.removeAttribute('data-ignore-mutation');
+        }, 0);
+
         console.log(
           '[DesignMode] Applied new class to element:',
           element.className
@@ -520,7 +526,13 @@ export const DesignModeProvider: React.FC<{
         );
 
         // 应用内容更新
+        element.setAttribute('data-ignore-mutation', 'true');
         element.innerText = newContent;
+        // Use setTimeout to ensure MutationObserver sees the attribute
+        setTimeout(() => {
+            element.removeAttribute('data-ignore-mutation');
+        }, 0);
+
         console.log(
           '[DesignMode] Applied new content to element:',
           element.innerText
@@ -630,9 +642,13 @@ export const DesignModeProvider: React.FC<{
             }
 
             if (update.type === 'style') {
+              element.setAttribute('data-ignore-mutation', 'true');
               element.className = update.newValue;
+              setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
             } else if (update.type === 'content') {
+              element.setAttribute('data-ignore-mutation', 'true');
               element.innerText = update.newValue;
+              setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
             }
 
             await updateSource(

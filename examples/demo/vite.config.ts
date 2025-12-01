@@ -39,9 +39,8 @@ export default defineConfig({
     appdevDesignMode({
       enabled: true,
       verbose: true,
-      include: ['src/**/*.{ts,tsx}'
-      ],
-      exclude: ['node_modules', 'dist'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['node_modules', 'dist', 'src/external-panel'],
     })
   ],
   resolve: {

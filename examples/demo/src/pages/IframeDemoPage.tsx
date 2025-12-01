@@ -25,9 +25,29 @@ export default function IframeDemoPage() {
     }>
   >([]);
 
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
+
   // Listen for messages from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // Debug log for message source
+      if (event.data.type === 'ELEMENT_SELECTED') {
+         console.log('[Parent] Received ELEMENT_SELECTED', {
+            source: event.source,
+            iframeWindow: iframeRef.current?.contentWindow,
+            isMatch: iframeRef.current && event.source === iframeRef.current.contentWindow,
+            data: event.data
+         });
+      }
+
+      // Only accept messages from the iframe
+      if (iframeRef.current && event.source !== iframeRef.current.contentWindow) {
+        if (event.data.type === 'ELEMENT_SELECTED') {
+            console.warn('[Parent] Ignoring message from non-iframe source');
+        }
+        return;
+      }
+
       const { type, payload } = event.data;
 
       switch (type) {
@@ -36,9 +56,7 @@ export default function IframeDemoPage() {
           break;
 
         case 'ELEMENT_SELECTED':
-          console.log('[Parent] Element selected - full payload:', payload);
-          console.log('[Parent] ElementInfo:', payload.elementInfo);
-          console.log('[Parent] SourceInfo:', payload.elementInfo?.sourceInfo);
+          console.log('[Parent] Processing ELEMENT_SELECTED', payload);
 
           // 验证 sourceInfo 是否有效
           if (
@@ -124,13 +142,30 @@ export default function IframeDemoPage() {
     });
   };
 
+  const lastSelectedElementRef = React.useRef(selectedElement);
+
   // Real-time content update
   useEffect(() => {
-    if (!selectedElement || debouncedContent === selectedElement.textContent) return;
+    if (!selectedElement) return;
 
+    // If selection changed, skip this update cycle
+    if (selectedElement !== lastSelectedElementRef.current) {
+        console.log('[Parent] Skipping content update due to selection change');
+        return;
+    }
+
+    console.log('[Parent] Content effect triggered', {
+        debouncedContent,
+        currentContent: selectedElement.textContent,
+        shouldUpdate: debouncedContent !== selectedElement.textContent
+    });
+
+    if (debouncedContent === selectedElement.textContent) return;
+
+    console.log('[Parent] Sending UPDATE_CONTENT', debouncedContent);
     upsertPendingChange('content', debouncedContent);
 
-    const iframe = document.querySelector('iframe');
+    const iframe = iframeRef.current;
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
         {
@@ -145,15 +180,23 @@ export default function IframeDemoPage() {
         '*'
       );
     }
-  }, [debouncedContent]);
+  }, [debouncedContent, selectedElement, upsertPendingChange]);
 
   // Real-time style update
   useEffect(() => {
-    if (!selectedElement || debouncedClass === selectedElement.className) return;
+    if (!selectedElement) return;
+
+    // If selection changed, skip this update cycle
+    if (selectedElement !== lastSelectedElementRef.current) {
+         console.log('[Parent] Skipping style update due to selection change');
+         return;
+    }
+
+    if (debouncedClass === selectedElement.className) return;
 
     upsertPendingChange('style', debouncedClass);
 
-    const iframe = document.querySelector('iframe');
+    const iframe = iframeRef.current;
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
         {
@@ -168,7 +211,12 @@ export default function IframeDemoPage() {
         '*'
       );
     }
-  }, [debouncedClass]);
+  }, [debouncedClass, selectedElement, upsertPendingChange]);
+
+  // Update lastSelectedElementRef AFTER other effects
+  useEffect(() => {
+    lastSelectedElementRef.current = selectedElement;
+  }, [selectedElement]);
 
   // Style Manager Logic
   const toggleStyle = (newStyle: string, categoryRegex: RegExp) => {
@@ -245,7 +293,7 @@ export default function IframeDemoPage() {
 
   // Toggle design mode in iframe
   const toggleIframeDesignMode = () => {
-    const iframe = document.querySelector('iframe');
+    const iframe = iframeRef.current;
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
         {
@@ -445,6 +493,7 @@ export default function IframeDemoPage() {
         <div className='flex-1 bg-gray-50 p-6'>
           <div className='h-full bg-white rounded-lg shadow-xl overflow-hidden'>
             <iframe
+              ref={iframeRef}
               src={window.location.origin}
               className='w-full h-full'
               title='设计模式 Iframe 演示'
