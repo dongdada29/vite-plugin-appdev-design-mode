@@ -1,14 +1,14 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useDesignMode } from './DesignModeContext';
-import { SourceInfo, ElementInfo } from '../types/messages';
+import { SourceInfo } from '../types/messages';
 import { extractSourceInfo, hasSourceMapping } from './utils/sourceInfo';
 import { isPureStaticText } from './utils/elementUtils';
 import { showContextMenu, MenuItem } from './ui/ContextMenu';
-import { enterEditMode, exitEditMode } from './ui/EditModeUI';
 import { UpdateOperation, UpdateState, UpdateResult, BatchUpdateItem, UpdateManagerConfig } from './types/UpdateTypes';
 import { HistoryManager } from './managers/HistoryManager';
 import { ObserverManager } from './managers/ObserverManager';
 import { EditManager } from './managers/EditManager';
+import { UpdateService } from './services/UpdateService';
 
 
 
@@ -20,10 +20,10 @@ import { EditManager } from './managers/EditManager';
  */
 export class UpdateManager {
   private updateQueue: UpdateState[] = [];
-  private processingUpdates = new Set<string>();
   private historyManager: HistoryManager;
   private observerManager: ObserverManager;
   private editManager: EditManager;
+  private updateService: UpdateService;
   private callbacks: Map<UpdateOperation, Set<(update: UpdateState) => void>> =
     new Map();
   private batchTimer: NodeJS.Timeout | null = null;
@@ -54,8 +54,21 @@ export class UpdateManager {
       (node) => this.setupElementEditHandlers(node)
     );
     this.editManager = new EditManager(
-      (update) => this.processUpdate(update),
+      (update) => this.updateService.processUpdate(update),
       this.config
+    );
+    this.updateService = new UpdateService(
+      this.config,
+      (update) => {
+        this.historyManager.add(update);
+        this.notifyCallbacks(update.operation, update);
+        if (this.config.autoSave) {
+          this.triggerAutoSave();
+        }
+      },
+      (update) => {
+        // onFail callback - could log or notify
+      }
     );
 
     if (this.config.enableDirectEdit) {
@@ -243,76 +256,18 @@ export class UpdateManager {
 
     switch (type) {
       case 'content':
-        this.editTextContent(element);
+        this.editManager.handleDirectEdit(element, 'content');
         break;
       case 'style':
-        this.editStyle(element);
+        this.editManager.editStyle(element);
         break;
       case 'attribute':
-        this.editAttributes(element);
+        this.editManager.editAttributes(element);
         break;
     }
   }
 
-  /**
-   * 编辑文本内容
-   */
-  private async editTextContent(element: HTMLElement) {
-    const sourceInfo = extractSourceInfo(element);
-    if (!sourceInfo) return;
 
-    // Check if element has static text
-    try {
-      const response = await fetch('/__appdev_design_mode/get-element-state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceInfo }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (!data.elementState?.isStaticText) {
-          console.warn('[UpdateManager] Cannot edit non-static text element');
-          alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('[UpdateManager] Failed to check if element is static text:', error);
-      return;
-    }
-
-    const originalText = element.innerText;
-
-    const textArea = enterEditMode({
-      element,
-      initialValue: originalText,
-      onSave: (newText) => {
-        if (newText !== originalText) {
-          element.innerText = newText;
-          this.updateContent(element, newText, extractSourceInfo(element)!);
-        }
-        exitEditMode(textArea);
-      },
-      onCancel: () => {
-        exitEditMode(textArea);
-      }
-    });
-  }
-
-  /**
-   * 编辑样式
-   */
-  private editStyle(element: HTMLElement) {
-    this.editManager.editStyle(element);
-  }
-
-  /**
-   * 编辑属性
-   */
-  private editAttributes(element: HTMLElement) {
-    this.editManager.editAttributes(element);
-  }
 
   /**
    * 退出编辑模式
@@ -526,67 +481,7 @@ export class UpdateManager {
    * 处理更新操作
    */
   private async processUpdate(update: UpdateState): Promise<UpdateResult> {
-    // 验证更新
-    if (!this.validateUpdate(update)) {
-      return {
-        success: false,
-        element: update.element,
-        updateId: update.id,
-        error: 'Update validation failed',
-      };
-    }
-
-    // 标记为处理中
-    update.status = 'processing';
-    this.processingUpdates.add(update.id);
-
-    try {
-      // 应用DOM更新
-      this.applyUpdateToDOM(update);
-
-      // 调用API保存到源码
-      const serverResponse = await this.saveToSource(update);
-
-      // 标记为完成
-      update.status = 'completed';
-
-      // 添加到历史记录
-      // 添加到历史记录
-      this.historyManager.add(update);
-
-      // 触发回调
-      this.notifyCallbacks(update.operation, update);
-
-      // 如果启用了自动保存，触发保存
-      if (this.config.autoSave) {
-        this.triggerAutoSave();
-      }
-
-      return {
-        success: true,
-        element: update.element,
-        updateId: update.id,
-        serverResponse,
-      };
-    } catch (error) {
-      update.status = 'failed';
-      update.error = error instanceof Error ? error.message : 'Unknown error';
-
-      // 重试机制
-      if (update.retryCount < this.config.maxRetries) {
-        update.retryCount++;
-        return this.processUpdate(update);
-      }
-
-      return {
-        success: false,
-        element: update.element,
-        updateId: update.id,
-        error: update.error,
-      };
-    } finally {
-      this.processingUpdates.delete(update.id);
-    }
+    return this.updateService.processUpdate(update);
   }
 
   /**
@@ -595,134 +490,7 @@ export class UpdateManager {
   private async processBatchUpdate(
     updates: UpdateState[]
   ): Promise<UpdateResult[]> {
-    try {
-      // 构建批量API请求
-      const batchRequest = {
-        updates: updates.map(update => ({
-          filePath: update.sourceInfo.fileName,
-          line: update.sourceInfo.lineNumber,
-          column: update.sourceInfo.columnNumber,
-          type: update.operation === 'style_update' ? 'style' : 'content',
-          newValue: update.newValue,
-          originalValue: update.oldValue,
-        })),
-      };
-
-      // 调用批量API
-      const response = await fetch('/__appdev_design_mode/batch-update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(batchRequest),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Batch update failed: ${response.statusText}`);
-      }
-
-      const results = await response.json();
-
-      // 标记所有更新为完成
-      updates.forEach(update => {
-        update.status = 'completed';
-        this.historyManager.add(update);
-        this.notifyCallbacks(update.operation, update);
-      });
-
-      return results.map((result: any, index: number) => ({
-        success: result.success,
-        element: updates[index].element,
-        updateId: updates[index].id,
-        serverResponse: result,
-      }));
-    } catch (error) {
-      // 标记所有更新为失败
-      updates.forEach(update => {
-        update.status = 'failed';
-        update.error = error instanceof Error ? error.message : 'Unknown error';
-      });
-
-      return updates.map(update => ({
-        success: false,
-        element: update.element,
-        updateId: update.id,
-        error: update.error,
-      }));
-    }
-  }
-
-  /**
-   * 应用更新到DOM
-   */
-  private applyUpdateToDOM(update: UpdateState) {
-    const { element, operation, newValue, oldValue } = update;
-
-    switch (operation) {
-      case 'style_update':
-      case 'class_update':
-        element.className = newValue;
-        break;
-      case 'content_update':
-        element.innerText = newValue;
-        break;
-      case 'attribute_update':
-        // 这里需要从sourceInfo中获取属性名
-        // 目前简化为设置data-attribute
-        element.setAttribute('data-updated-value', newValue);
-        break;
-    }
-  }
-
-  /**
-   * 保存到源码
-   */
-  private async saveToSource(update: UpdateState): Promise<any> {
-    const response = await fetch('/__appdev_design_mode/update', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        filePath: update.sourceInfo.fileName,
-        line: update.sourceInfo.lineNumber,
-        column: update.sourceInfo.columnNumber,
-        newValue: update.newValue,
-        originalValue: update.oldValue,
-        type: update.operation === 'style_update' ? 'style' : 'content',
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to save source: ${response.statusText}`);
-    }
-
-    return await response.json();
-  }
-
-  /**
-   * 验证更新
-   */
-  private validateUpdate(update: UpdateState): boolean {
-    // 验证源码映射
-    if (this.config.validation.validateSource) {
-      if (
-        !update.sourceInfo.fileName ||
-        update.sourceInfo.lineNumber === null ||
-        update.sourceInfo.columnNumber === null
-      ) {
-        return false;
-      }
-    }
-
-    // 验证值
-    if (this.config.validation.validateValue) {
-      if (update.newValue.length > this.config.validation.maxLength) {
-        return false;
-      }
-    }
-
-    return true;
+    return this.updateService.processBatchUpdate(updates);
   }
 
   /**

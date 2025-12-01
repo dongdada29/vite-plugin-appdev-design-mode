@@ -180,7 +180,7 @@ export default function IframeDemoPage() {
         '*'
       );
     }
-  }, [debouncedContent, selectedElement, upsertPendingChange]);
+  }, [debouncedContent, selectedElement]); // Removed upsertPendingChange to fix infinite loop
 
   // Real-time style update
   useEffect(() => {
@@ -211,7 +211,7 @@ export default function IframeDemoPage() {
         '*'
       );
     }
-  }, [debouncedClass, selectedElement, upsertPendingChange]);
+  }, [debouncedClass, selectedElement]); // Removed upsertPendingChange to fix infinite loop
 
   // Update lastSelectedElementRef AFTER other effects
   useEffect(() => {
