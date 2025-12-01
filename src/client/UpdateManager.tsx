@@ -472,8 +472,15 @@ export class UpdateManager {
    * 显示上下文菜单
    */
   private showContextMenu(element: HTMLElement, x: number, y: number) {
+    // 如果已经存在菜单，先关闭它
+    const existingMenu = document.querySelector('[data-context-menu="true"]') as HTMLElement;
+    if (existingMenu) {
+      document.body.removeChild(existingMenu);
+    }
+
     // 创建上下文菜单
     const menu = document.createElement('div');
+    menu.setAttribute('data-context-menu', 'true');
     menu.style.position = 'fixed';
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
@@ -483,6 +490,7 @@ export class UpdateManager {
     menu.style.padding = '4px 0';
     menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
     menu.style.zIndex = '10000';
+    menu.style.minWidth = '150px';
 
     // 菜单项
     const menuItems = [
@@ -521,17 +529,20 @@ export class UpdateManager {
       menuItem.style.background = 'transparent';
 
       menuItem.addEventListener('mouseenter', () => {
-        menuItem.style.background = '#f0f0f0';
+        if (!(item as any).disabled) {
+          menuItem.style.background = '#f0f0f0';
+        }
       });
 
       menuItem.addEventListener('mouseleave', () => {
         menuItem.style.background = 'transparent';
       });
 
-      menuItem.addEventListener('click', () => {
+      menuItem.addEventListener('click', (e) => {
+        e.stopPropagation();
         if ((item as any).disabled) return;
         item.action();
-        document.body.removeChild(menu);
+        this.closeContextMenu(menu);
       });
 
       menu.appendChild(menuItem);
@@ -540,17 +551,92 @@ export class UpdateManager {
     // 添加到页面
     document.body.appendChild(menu);
 
-    // 点击其他地方关闭菜单
-    const closeMenu = (e: MouseEvent) => {
+    // 确保菜单在视口内
+    const rect = menu.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    if (rect.right > viewportWidth) {
+      menu.style.left = (viewportWidth - rect.width - 10) + 'px';
+    }
+    if (rect.bottom > viewportHeight) {
+      menu.style.top = (viewportHeight - rect.height - 10) + 'px';
+    }
+
+    // 使用更完善的 clickoutside 处理
+    this.setupContextMenuCloseHandlers(menu);
+  }
+
+  /**
+   * 设置右键菜单的关闭处理器（支持 clickoutside 和 ESC 键）
+   */
+  private setupContextMenuCloseHandlers(menu: HTMLElement) {
+    // 关闭菜单的函数
+    const closeMenu = () => {
+      this.closeContextMenu(menu);
+    };
+
+    // 点击外部区域关闭菜单
+    const handleClickOutside = (e: MouseEvent) => {
+      // 检查点击是否在菜单外部
       if (!menu.contains(e.target as Node)) {
-        document.body.removeChild(menu);
-        document.removeEventListener('click', closeMenu);
+        closeMenu();
       }
     };
 
+    // 右键点击外部区域也关闭菜单
+    const handleContextMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        closeMenu();
+      }
+    };
+
+    // ESC 键关闭菜单
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeMenu();
+      }
+    };
+
+    // 滚动时关闭菜单
+    const handleScroll = () => {
+      closeMenu();
+    };
+
+    // 使用捕获阶段确保能捕获到所有点击事件
+    // 延迟添加监听器，避免立即触发（因为右键事件会冒泡）
     setTimeout(() => {
-      document.addEventListener('click', closeMenu);
-    }, 100);
+      document.addEventListener('click', handleClickOutside, true);
+      document.addEventListener('contextmenu', handleContextMenu, true);
+      document.addEventListener('keydown', handleKeyDown, true);
+      window.addEventListener('scroll', handleScroll, true);
+      window.addEventListener('resize', handleScroll, true);
+    }, 0);
+
+    // 将清理函数存储在菜单元素上，以便在关闭时调用
+    (menu as any).__cleanupHandlers = () => {
+      document.removeEventListener('click', handleClickOutside, true);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll, true);
+    };
+  }
+
+  /**
+   * 关闭右键菜单
+   */
+  private closeContextMenu(menu: HTMLElement) {
+    // 执行清理函数
+    if ((menu as any).__cleanupHandlers) {
+      (menu as any).__cleanupHandlers();
+      delete (menu as any).__cleanupHandlers;
+    }
+
+    // 移除菜单元素
+    if (menu.parentNode) {
+      menu.parentNode.removeChild(menu);
+    }
   }
 
   /**
