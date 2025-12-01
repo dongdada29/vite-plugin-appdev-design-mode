@@ -3,73 +3,16 @@ import { useDesignMode } from './DesignModeContext';
 import { SourceInfo, ElementInfo } from '../types/messages';
 import { extractSourceInfo, hasSourceMapping } from './utils/sourceInfo';
 import { isPureStaticText } from './utils/elementUtils';
-import { showContextMenu, closeContextMenu, MenuItem } from './ui/ContextMenu';
+import { showContextMenu, MenuItem } from './ui/ContextMenu';
+import { enterEditMode, exitEditMode } from './ui/EditModeUI';
+import { UpdateOperation, UpdateState, UpdateResult, BatchUpdateItem, UpdateManagerConfig } from './types/UpdateTypes';
+import { HistoryManager } from './managers/HistoryManager';
+import { ObserverManager } from './managers/ObserverManager';
+import { EditManager } from './managers/EditManager';
 
-/**
- * 更新操作类型
- */
-export type UpdateOperation =
-  | 'style_update'
-  | 'content_update'
-  | 'attribute_update'
-  | 'class_update'
-  | 'batch_update';
 
-/**
- * 更新状态
- */
-export interface UpdateState {
-  id: string;
-  operation: UpdateOperation;
-  sourceInfo: SourceInfo;
-  element: HTMLElement;
-  oldValue: string;
-  newValue: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'reverted';
-  timestamp: number;
-  error?: string;
-  retryCount: number;
-}
 
-/**
- * 更新结果
- */
-export interface UpdateResult {
-  success: boolean;
-  element: HTMLElement;
-  updateId: string;
-  error?: string;
-  serverResponse?: any;
-}
 
-/**
- * 批量更新项
- */
-export interface BatchUpdateItem {
-  element: HTMLElement;
-  type: 'style' | 'content' | 'attribute';
-  sourceInfo: SourceInfo;
-  newValue: string;
-  originalValue?: string;
-  selector?: string;
-}
-
-/**
- * 更新管理器配置
- */
-export interface UpdateManagerConfig {
-  enableDirectEdit: boolean;
-  enableBatching: boolean;
-  batchDebounceMs: number;
-  maxRetries: number;
-  autoSave: boolean;
-  saveDelay: number;
-  validation: {
-    validateSource: boolean;
-    validateValue: boolean;
-    maxLength: number;
-  };
-}
 
 /**
  * 更新管理器
@@ -78,12 +21,13 @@ export interface UpdateManagerConfig {
 export class UpdateManager {
   private updateQueue: UpdateState[] = [];
   private processingUpdates = new Set<string>();
-  private updateHistory: UpdateState[] = [];
+  private historyManager: HistoryManager;
+  private observerManager: ObserverManager;
+  private editManager: EditManager;
   private callbacks: Map<UpdateOperation, Set<(update: UpdateState) => void>> =
     new Map();
   private batchTimer: NodeJS.Timeout | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
-  private observer: MutationObserver | null = null;
 
   // Design mode state
   private isDesignMode: boolean = false;
@@ -104,96 +48,27 @@ export class UpdateManager {
       },
     }
   ) {
-    this.initializeObserver();
+    this.historyManager = new HistoryManager();
+    this.observerManager = new ObserverManager(
+      (target, type) => this.editManager.handleDirectEdit(target, type),
+      (node) => this.setupElementEditHandlers(node)
+    );
+    this.editManager = new EditManager(
+      (update) => this.processUpdate(update),
+      this.config
+    );
+
+    if (this.config.enableDirectEdit) {
+      this.observerManager.enable();
+    }
+
     this.initializeEventListeners();
   }
 
   /**
    * 初始化DOM变化观察器
    */
-  private initializeObserver() {
-    if (!this.config.enableDirectEdit) return;
 
-    this.observer = new MutationObserver(mutations => {
-      // 处理直接编辑的DOM变化
-      mutations.forEach(mutation => {
-        // Check if the mutation should be ignored
-        const targetNode = mutation.target;
-        const targetElement = targetNode.nodeType === Node.ELEMENT_NODE
-          ? targetNode as HTMLElement
-          : targetNode.parentElement;
-
-        if (targetElement && targetElement.hasAttribute('data-ignore-mutation')) {
-          console.log('[UpdateManager] Ignoring mutation due to data-ignore-mutation', {
-            type: mutation.type,
-            target: targetElement
-          });
-          return;
-        }
-
-        if (mutation.type === 'childList') {
-          // 处理元素添加/删除
-          mutation.addedNodes.forEach(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              this.setupElementEditHandlers(node as HTMLElement);
-            }
-          });
-        } else if (mutation.type === 'characterData') {
-          // 处理文本内容变化
-          const target = mutation.target.parentElement as HTMLElement;
-          if (target && hasSourceMapping(target)) {
-            // Double check ignore attribute for text node parent
-            if (target.hasAttribute('data-ignore-mutation')) {
-                console.log('[UpdateManager] Ignoring characterData mutation', target);
-                return;
-            }
-            console.log('[UpdateManager] Processing characterData mutation', target);
-            this.handleDirectEdit(target, 'content');
-          }
-        } else if (mutation.type === 'attributes') {
-          // 处理属性变化（样式、class等）
-          const target = mutation.target as HTMLElement;
-          if (target && hasSourceMapping(target)) {
-            const attributeName = mutation.attributeName;
-            const newValue = target.getAttribute(attributeName!);
-            const oldValue = mutation.oldValue;
-
-            if (newValue === oldValue) {
-                console.log('[UpdateManager] Ignoring attribute mutation with same value', { attributeName, value: newValue });
-                return;
-            }
-
-            if (attributeName === 'class') {
-              console.log('[UpdateManager] Processing class mutation', {
-                target,
-                oldValue,
-                newValue,
-                diff: oldValue !== newValue
-              });
-              this.handleDirectEdit(target, 'style');
-            } else if (attributeName?.startsWith('style')) {
-              console.log('[UpdateManager] Processing style mutation', {
-                target,
-                oldValue,
-                newValue
-              });
-              this.handleDirectEdit(target, 'style');
-            }
-          }
-        }
-      });
-    });
-
-    // 开始观察DOM变化
-    this.observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeOldValue: true,
-      attributeFilter: ['class', 'style'],
-    });
-  }
 
   /**
    * 初始化事件监听器
@@ -231,7 +106,7 @@ export class UpdateManager {
     }
 
     // 进入编辑模式
-    this.enterEditMode(target, 'content');
+    this.editManager.handleDirectEdit(target, 'content');
   }
 
   /**
@@ -273,7 +148,7 @@ export class UpdateManager {
       if (selectedElement && hasSourceMapping(selectedElement)) {
         event.preventDefault();
         if (isPureStaticText(selectedElement)) {
-          this.enterEditMode(selectedElement, 'content');
+          this.editManager.handleDirectEdit(selectedElement, 'content');
         } else {
           console.log('[UpdateManager] Cannot edit non-static text element');
         }
@@ -408,54 +283,19 @@ export class UpdateManager {
     }
 
     const originalText = element.innerText;
-    const textArea = document.createElement('textarea');
 
-    // 设置textarea样式
-    textArea.value = originalText;
-    textArea.style.position = 'absolute';
-    textArea.style.zIndex = '9999';
-    textArea.style.width = element.offsetWidth + 'px';
-    textArea.style.height = element.offsetHeight + 'px';
-    textArea.style.fontSize = window.getComputedStyle(element).fontSize;
-    textArea.style.fontFamily = window.getComputedStyle(element).fontFamily;
-    textArea.style.color = window.getComputedStyle(element).color;
-    textArea.style.background = 'rgba(255, 255, 255, 0.9)';
-    textArea.style.border = '2px solid #007acc';
-    textArea.style.padding = '4px';
-    textArea.style.margin = '0';
-    textArea.style.resize = 'none';
-    textArea.style.outline = 'none';
-
-    // 获取元素的边界矩形
-    const rect = element.getBoundingClientRect();
-    textArea.style.left = rect.left + 'px';
-    textArea.style.top = rect.top + 'px';
-
-    // 添加到页面
-    document.body.appendChild(textArea);
-    textArea.focus();
-
-    // 处理保存和取消
-    const handleSave = () => {
-      const newText = textArea.value;
-      if (newText !== originalText) {
-        element.innerText = newText;
-        this.updateContent(element, newText, extractSourceInfo(element)!);
-      }
-      this.exitEditMode(textArea);
-    };
-
-    const handleCancel = () => {
-      this.exitEditMode(textArea);
-    };
-
-    // 事件监听
-    textArea.addEventListener('blur', handleSave);
-    textArea.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        handleSave();
-      } else if (e.key === 'Escape') {
-        handleCancel();
+    const textArea = enterEditMode({
+      element,
+      initialValue: originalText,
+      onSave: (newText) => {
+        if (newText !== originalText) {
+          element.innerText = newText;
+          this.updateContent(element, newText, extractSourceInfo(element)!);
+        }
+        exitEditMode(textArea);
+      },
+      onCancel: () => {
+        exitEditMode(textArea);
       }
     });
   }
@@ -464,39 +304,20 @@ export class UpdateManager {
    * 编辑样式
    */
   private editStyle(element: HTMLElement) {
-    // 打开样式编辑器（这里可以集成外部样式面板）
-    console.log('[UpdateManager] Opening style editor for:', element);
-
-    // 触发样式编辑事件
-    this.notifyCallbacks('class_update', {
-      id: this.generateUpdateId(),
-      operation: 'class_update' as UpdateOperation,
-      sourceInfo: extractSourceInfo(element)!,
-      element,
-      oldValue: element.className,
-      newValue: element.className,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    });
+    this.editManager.editStyle(element);
   }
 
   /**
    * 编辑属性
    */
   private editAttributes(element: HTMLElement) {
-    // 打开属性编辑器
-    console.log('[UpdateManager] Opening attribute editor for:', element);
+    this.editManager.editAttributes(element);
   }
 
   /**
    * 退出编辑模式
    */
-  private exitEditMode(editor: HTMLElement) {
-    if (editor.parentNode) {
-      editor.parentNode.removeChild(editor);
-    }
-  }
+
 
   /**
    * 显示上下文菜单
@@ -516,77 +337,7 @@ export class UpdateManager {
   /**
    * 设置右键菜单的关闭处理器（支持 clickoutside 和 ESC 键）
    */
-  private setupContextMenuCloseHandlers(menu: HTMLElement) {
-    // 关闭菜单的函数
-    const closeMenu = () => {
-      this.closeContextMenu(menu);
-    };
 
-    // 点击外部区域关闭菜单
-    const handleClickOutside = (e: MouseEvent) => {
-      // 检查点击是否在菜单外部
-      if (!menu.contains(e.target as Node)) {
-        // Prevent event from bubbling to avoid deselecting element
-        e.preventDefault();
-        e.stopPropagation();
-        closeMenu();
-      }
-    };
-
-    // 右键点击外部区域也关闭菜单
-    const handleContextMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        closeMenu();
-      }
-    };
-
-    // ESC 键关闭菜单
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        closeMenu();
-      }
-    };
-
-    // 滚动时关闭菜单
-    const handleScroll = () => {
-      closeMenu();
-    };
-
-    // 使用捕获阶段确保能捕获到所有点击事件
-    // 延迟添加监听器，避免立即触发（因为右键事件会冒泡）
-    setTimeout(() => {
-      document.addEventListener('click', handleClickOutside, true);
-      document.addEventListener('contextmenu', handleContextMenu, true);
-      document.addEventListener('keydown', handleKeyDown, true);
-      window.addEventListener('scroll', handleScroll, true);
-      window.addEventListener('resize', handleScroll, true);
-    }, 0);
-
-    // 将清理函数存储在菜单元素上，以便在关闭时调用
-    (menu as any).__cleanupHandlers = () => {
-      document.removeEventListener('click', handleClickOutside, true);
-      document.removeEventListener('contextmenu', handleContextMenu, true);
-      document.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleScroll, true);
-    };
-  }
-
-  /**
-   * 关闭右键菜单
-   */
-  private closeContextMenu(menu: HTMLElement) {
-    // 执行清理函数
-    if ((menu as any).__cleanupHandlers) {
-      (menu as any).__cleanupHandlers();
-      delete (menu as any).__cleanupHandlers;
-    }
-
-    // 移除菜单元素
-    if (menu.parentNode) {
-      menu.parentNode.removeChild(menu);
-    }
-  }
 
   /**
    * 复制元素
@@ -683,22 +434,7 @@ export class UpdateManager {
     newClass: string,
     sourceInfo: SourceInfo
   ): Promise<UpdateResult> {
-    const oldClass = element.className;
-    const updateId = this.generateUpdateId();
-
-    const update: UpdateState = {
-      id: updateId,
-      operation: 'class_update',
-      sourceInfo,
-      element,
-      oldValue: oldClass,
-      newValue: newClass,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    };
-
-    return this.processUpdate(update);
+    return this.editManager.updateStyle(element, newClass, sourceInfo);
   }
 
   /**
@@ -709,22 +445,7 @@ export class UpdateManager {
     newContent: string,
     sourceInfo: SourceInfo
   ): Promise<UpdateResult> {
-    const oldContent = element.innerText;
-    const updateId = this.generateUpdateId();
-
-    const update: UpdateState = {
-      id: updateId,
-      operation: 'content_update',
-      sourceInfo,
-      element,
-      oldValue: oldContent,
-      newValue: newContent,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    };
-
-    return this.processUpdate(update);
+    return this.editManager.updateContent(element, newContent, sourceInfo);
   }
 
   /**
@@ -736,22 +457,7 @@ export class UpdateManager {
     newValue: string,
     sourceInfo: SourceInfo
   ): Promise<UpdateResult> {
-    const oldValue = element.getAttribute(attributeName) || '';
-    const updateId = this.generateUpdateId();
-
-    const update: UpdateState = {
-      id: updateId,
-      operation: 'attribute_update',
-      sourceInfo,
-      element,
-      oldValue,
-      newValue,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    };
-
-    return this.processUpdate(update);
+    return this.editManager.updateAttribute(element, attributeName, newValue, sourceInfo);
   }
 
   /**
@@ -845,7 +551,8 @@ export class UpdateManager {
       update.status = 'completed';
 
       // 添加到历史记录
-      this.updateHistory.push(update);
+      // 添加到历史记录
+      this.historyManager.add(update);
 
       // 触发回调
       this.notifyCallbacks(update.operation, update);
@@ -919,7 +626,7 @@ export class UpdateManager {
       // 标记所有更新为完成
       updates.forEach(update => {
         update.status = 'completed';
-        this.updateHistory.push(update);
+        this.historyManager.add(update);
         this.notifyCallbacks(update.operation, update);
       });
 
@@ -1062,13 +769,12 @@ export class UpdateManager {
    * 撤销上一次更新
    */
   public undoLastUpdate(): boolean {
-    const lastUpdate = this.updateHistory.pop();
+    const lastUpdate = this.historyManager.undo();
     if (!lastUpdate) return false;
 
     // 恢复DOM
     lastUpdate.element.innerText = lastUpdate.oldValue;
     lastUpdate.element.className = lastUpdate.oldValue;
-    lastUpdate.status = 'reverted';
 
     console.log('[UpdateManager] Undone update:', lastUpdate.id);
     return true;
@@ -1078,17 +784,12 @@ export class UpdateManager {
    * 重做上一次更新
    */
   public redoLastUpdate(): boolean {
-    const revertedUpdates = this.updateHistory.filter(
-      u => u.status === 'reverted'
-    );
-    if (revertedUpdates.length === 0) return false;
-
-    const lastReverted = revertedUpdates[revertedUpdates.length - 1];
+    const lastReverted = this.historyManager.redo();
+    if (!lastReverted) return false;
 
     // 重新应用更新
     lastReverted.element.innerText = lastReverted.newValue;
     lastReverted.element.className = lastReverted.newValue;
-    lastReverted.status = 'completed';
 
     console.log('[UpdateManager] Redid update:', lastReverted.id);
     return true;
@@ -1133,7 +834,7 @@ export class UpdateManager {
    * 获取更新历史
    */
   public getUpdateHistory(): UpdateState[] {
-    return [...this.updateHistory];
+    return this.historyManager.getHistory();
   }
 
   /**
@@ -1141,9 +842,7 @@ export class UpdateManager {
    */
   public destroy() {
     // 停止观察器
-    if (this.observer) {
-      this.observer.disconnect();
-    }
+    this.observerManager.disable();
 
     // 清除定时器
     if (this.batchTimer) {
@@ -1156,7 +855,7 @@ export class UpdateManager {
 
     // 清除队列
     this.updateQueue = [];
-    this.updateHistory = [];
+    this.historyManager.clear();
     this.callbacks.clear();
   }
 }
