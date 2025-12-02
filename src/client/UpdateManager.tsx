@@ -32,6 +32,7 @@ export class UpdateManager {
   // Design mode state
   private isDesignMode: boolean = false;
   private selectedElement: HTMLElement | null = null;
+  private selectElementCallback: ((element: HTMLElement | null) => void) | null = null;
 
   constructor(
     private config: UpdateManagerConfig = {
@@ -112,11 +113,11 @@ export class UpdateManager {
     event.preventDefault();
     event.stopPropagation();
 
-    // Check if it's pure static text
-    if (!isPureStaticText(target)) {
-      console.log('[UpdateManager] Ignored dblclick on non-static text element');
-      return;
-    }
+    // Check if it's pure static text - REMOVED to let EditManager handle validation
+    // if (!isPureStaticText(target)) {
+    //   console.log('[UpdateManager] Ignored dblclick on non-static text element');
+    //   return;
+    // }
 
     // 进入编辑模式
     this.editManager.handleDirectEdit(target, 'content');
@@ -134,25 +135,40 @@ export class UpdateManager {
     // Exclude context menu
     if (target.closest('[data-context-menu="true"]')) return;
 
-    // Only show context menu if the target is the currently selected element
-
-    // Only show context menu if the target is the currently selected element
-    if (!this.selectedElement || target !== this.selectedElement) return;
-
+    // 检查元素是否有源码映射（可被选中）
     if (!hasSourceMapping(target)) return;
+
+    // 检查是否是已选中元素
+    const isSelected = !!(this.selectedElement && target === this.selectedElement);
+
+    // 如果元素有 hover 状态，在显示菜单前保持它（防止 mouseout 事件移除）
+    const hadHoverState = target.hasAttribute('data-design-hover');
+    if (hadHoverState) {
+      // 添加标记，表示这是右键菜单保持的 hover 状态
+      target.setAttribute('data-context-menu-hover', 'true');
+      // 确保 hover 状态保持
+      target.setAttribute('data-design-hover', 'true');
+    }
 
     event.preventDefault();
 
-    // 显示自定义上下文菜单或触发编辑
-    this.showContextMenu(target, event.clientX, event.clientY);
+    // 显示自定义上下文菜单（已选中元素或可被选中的元素都可以显示）
+    this.showContextMenu(target, event.clientX, event.clientY, isSelected);
   }
 
   /**
    * Update design mode state
    */
-  public setDesignModeState(isDesignMode: boolean, selectedElement: HTMLElement | null = null) {
+  public setDesignModeState(
+    isDesignMode: boolean,
+    selectedElement: HTMLElement | null = null,
+    selectElementCallback?: (element: HTMLElement | null) => void
+  ) {
     this.isDesignMode = isDesignMode;
     this.selectedElement = selectedElement;
+    if (selectElementCallback) {
+      this.selectElementCallback = selectElementCallback;
+    }
   }
 
 
@@ -165,11 +181,12 @@ export class UpdateManager {
       const selectedElement = document.activeElement as HTMLElement;
       if (selectedElement && hasSourceMapping(selectedElement)) {
         event.preventDefault();
-        if (isPureStaticText(selectedElement)) {
-          this.editManager.handleDirectEdit(selectedElement, 'content');
-        } else {
-          console.log('[UpdateManager] Cannot edit non-static text element');
-        }
+        this.editManager.handleDirectEdit(selectedElement, 'content');
+        // if (isPureStaticText(selectedElement)) {
+        //   this.editManager.handleDirectEdit(selectedElement, 'content');
+        // } else {
+        //   console.log('[UpdateManager] Cannot edit non-static text element');
+        // }
       }
     }
 
@@ -282,14 +299,49 @@ export class UpdateManager {
   /**
    * 显示上下文菜单
    */
-  private showContextMenu(element: HTMLElement, x: number, y: number) {
-    const menuItems: MenuItem[] = [
+  private showContextMenu(element: HTMLElement, x: number, y: number, isSelected: boolean) {
+    const menuItems: MenuItem[] = [];
+
+    // 如果是已选中元素，添加"取消选中"选项
+    if (isSelected) {
+      menuItems.push({
+        label: '取消选中',
+        action: () => {
+          if (this.selectElementCallback) {
+            this.selectElementCallback(null);
+          }
+        },
+      });
+    } else {
+      // 如果是 hover 元素，添加"选中"选项
+      menuItems.push({
+        label: '选中',
+        action: () => {
+          if (this.selectElementCallback) {
+            this.selectElementCallback(element);
+          }
+        },
+      });
+    }
+
+    // 添加分隔线（如果有其他菜单项）
+    menuItems.push({
+      label: '---',
+      action: () => { },
+      disabled: true,
+    });
+
+    // 添加其他菜单项
+    menuItems.push(
       {
         label: 'Add to Chat',
         action: () => this.addToChat(element),
       },
-      { label: '复制元素', action: () => this.copyElement(element) },
-    ];
+      {
+        label: '复制元素',
+        action: () => this.copyElement(element)
+      }
+    );
 
     showContextMenu(element, x, y, menuItems);
   }
@@ -673,11 +725,12 @@ export const useUpdateManager = (config?: Partial<UpdateManagerConfig>) => {
   }, [designModeConfig]);
 
   // Sync design mode state and selected element with UpdateManager
+  const { selectElement } = useDesignMode();
   React.useEffect(() => {
     if (updateManagerRef.current) {
-      updateManagerRef.current.setDesignModeState(isDesignMode, selectedElement);
+      updateManagerRef.current.setDesignModeState(isDesignMode, selectedElement, selectElement);
     }
-  }, [isDesignMode, selectedElement]);
+  }, [isDesignMode, selectedElement, selectElement]);
 
 
   return {
