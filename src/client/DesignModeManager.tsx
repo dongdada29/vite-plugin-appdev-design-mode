@@ -131,7 +131,10 @@ export const DesignModeManager: React.FC = () => {
 
     const handleMouseOut = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      target.removeAttribute('data-design-hover');
+      // 如果元素有右键菜单保持的 hover 状态，不要移除它
+      if (!target.hasAttribute('data-context-menu-hover')) {
+        target.removeAttribute('data-design-hover');
+      }
     };
 
     document.addEventListener('click', handleClick, true);

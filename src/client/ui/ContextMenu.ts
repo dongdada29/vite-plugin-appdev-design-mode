@@ -22,6 +22,9 @@ export function showContextMenu(
     document.body.removeChild(existingMenu);
   }
 
+  // 检查元素是否有右键菜单保持的 hover 状态
+  const hadHoverState = element.hasAttribute('data-context-menu-hover');
+
   // Create context menu
   const menu = document.createElement('div');
   menu.setAttribute('data-context-menu', 'true');
@@ -38,6 +41,17 @@ export function showContextMenu(
 
   // Create menu items
   menuItems.forEach(item => {
+    // 处理分隔线
+    if (item.label === '---' || item.disabled) {
+      const separator = document.createElement('div');
+      separator.style.height = '1px';
+      separator.style.background = '#e5e7eb';
+      separator.style.margin = '4px 0';
+      separator.style.padding = '0';
+      menu.appendChild(separator);
+      return;
+    }
+
     const menuItem = document.createElement('div');
     menuItem.textContent = item.label;
     menuItem.style.padding = '8px 16px';
@@ -89,7 +103,7 @@ export function showContextMenu(
   }
 
   // Setup close handlers
-  setupContextMenuCloseHandlers(menu);
+  setupContextMenuCloseHandlers(menu, element, hadHoverState);
 
   return menu;
 }
@@ -104,17 +118,72 @@ export function closeContextMenu(menu: HTMLElement) {
     delete (menu as any).__cleanupHandlers;
   }
 
+  // 处理 hover 状态恢复
+  const targetElement = (menu as any).__targetElement as HTMLElement | null;
+  const hadHoverState = (menu as any).__hadHoverState as boolean;
+
   // Remove menu element
   if (menu.parentNode) {
     menu.parentNode.removeChild(menu);
+  }
+
+  // 如果之前有 hover 状态，检查鼠标是否还在元素上
+  if (targetElement && hadHoverState) {
+    // 移除右键菜单保持的标记
+    targetElement.removeAttribute('data-context-menu-hover');
+
+    // 使用 setTimeout 确保在 mouseout 事件处理之后执行
+    setTimeout(() => {
+      // 检查鼠标是否在元素上
+      const mouseX = (window as any).__lastMouseX || 0;
+      const mouseY = (window as any).__lastMouseY || 0;
+      const rect = targetElement.getBoundingClientRect();
+      const isMouseOver = 
+        mouseX >= rect.left &&
+        mouseX <= rect.right &&
+        mouseY >= rect.top &&
+        mouseY <= rect.bottom;
+
+      // 如果鼠标不在元素上，移除 hover 状态
+      if (!isMouseOver) {
+        targetElement.removeAttribute('data-design-hover');
+      } else {
+        // 如果鼠标还在元素上，保持 hover 状态
+        // 触发一个 mouseenter 事件来恢复正常的 hover 行为
+        const mouseEnterEvent = new MouseEvent('mouseenter', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: mouseX,
+          clientY: mouseY
+        });
+        targetElement.dispatchEvent(mouseEnterEvent);
+      }
+    }, 10);
   }
 }
 
 /**
  * Setup context menu close handlers (clickoutside and ESC key)
  */
-function setupContextMenuCloseHandlers(menu: HTMLElement) {
+function setupContextMenuCloseHandlers(
+  menu: HTMLElement,
+  targetElement: HTMLElement,
+  hadHoverState: boolean
+) {
+  // 存储目标元素和 hover 状态信息
+  (menu as any).__targetElement = targetElement;
+  (menu as any).__hadHoverState = hadHoverState;
+
+  // 跟踪鼠标位置
+  const trackMouse = (e: MouseEvent) => {
+    (window as any).__lastMouseX = e.clientX;
+    (window as any).__lastMouseY = e.clientY;
+  };
+  document.addEventListener('mousemove', trackMouse);
+
   const closeMenu = () => {
+    document.removeEventListener('mousemove', trackMouse);
     closeContextMenu(menu);
   };
 
