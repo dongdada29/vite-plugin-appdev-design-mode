@@ -14,13 +14,48 @@
 
 ## Installation
 
+### 一键安装（推荐）
+
+使用 CLI 工具一键安装插件并自动配置 `vite.config.ts`：
+
+```bash
+npx @xagi/vite-plugin-design-mode install
+```
+
+这个命令会：
+- 自动检测项目使用的包管理器（npm/pnpm/yarn）
+- 安装或升级插件到最新版本
+- 自动在 `vite.config.ts` 中添加插件配置
+- 使用默认配置，无需手动传参
+
+### 一键卸载
+
+使用 CLI 工具一键卸载插件并清理配置：
+
+```bash
+npx @xagi/vite-plugin-design-mode uninstall
+```
+
+这个命令会：
+- 从 `package.json` 中移除插件依赖
+- 从 `vite.config.ts` 中移除 import 和插件配置
+- 自动清理所有相关配置
+
+### 手动安装
+
+如果需要手动安装：
+
 ```bash
 npm install @xagi/vite-plugin-design-mode --save-dev
 # or
 yarn add @xagi/vite-plugin-design-mode --dev
+# or
+pnpm add @xagi/vite-plugin-design-mode -D
 ```
 
 ## Basic Usage
+
+使用一键安装后，插件已自动配置，`vite.config.ts` 中会包含：
 
 ```typescript
 // vite.config.ts
@@ -31,10 +66,17 @@ import appdevDesignMode from '@xagi/vite-plugin-design-mode';
 export default defineConfig({
   plugins: [
     react(),
-    appdevDesignMode()
+    appdevDesignMode()  // 使用默认配置，无需传参
   ]
 });
 ```
+
+**默认配置说明：**
+- `enabled: true` - 启用插件
+- `enableInProduction: false` - 仅在开发环境生效，生产构建时自动禁用
+- `verbose: true` - 启用详细日志
+- `include: ['src/**/*.{ts,tsx}']` - 处理 src 目录下的 TypeScript/TSX 文件
+- `exclude: ['node_modules', 'dist', 'src/components/ui']` - 排除指定目录
 
 ## Advanced Usage
 
@@ -150,9 +192,9 @@ window.parent.postMessage({
 | `enabled` | boolean | `true` | 是否启用设计模式插件 |
 | `enableInProduction` | boolean | `false` | 是否在生产环境启用，通常保持false |
 | `attributePrefix` | string | `'data-source'` | 自定义源码映射属性的前缀 |
-| `verbose` | boolean | `false` | 是否启用详细日志输出，便于调试 |
-| `exclude` | string[] | `['node_modules', '.git']` | 排除处理的文件模式和目录 |
-| `include` | string[] | `['**/*.{js,jsx,ts,tsx}']` | 包含处理的文件模式，支持glob语法 |
+| `verbose` | boolean | `true` | 是否启用详细日志输出，便于调试 |
+| `exclude` | string[] | `['node_modules', 'dist', 'src/components/ui']` | 排除处理的文件模式和目录 |
+| `include` | string[] | `['src/**/*.{ts,tsx}']` | 包含处理的文件模式，支持glob语法 |
 
 ### 配置示例
 
