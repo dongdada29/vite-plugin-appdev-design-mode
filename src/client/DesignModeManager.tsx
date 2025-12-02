@@ -43,6 +43,12 @@ export const DesignModeManager: React.FC = () => {
 
       const target = e.target as HTMLElement;
 
+      // Check if element is marked as static content
+      if (!target.hasAttribute('data-static-content')) {
+        // alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
+        return;
+      }
+
       // IMPORTANT: Save original content BEFORE enabling editing
       const originalContent = target.innerText;
 

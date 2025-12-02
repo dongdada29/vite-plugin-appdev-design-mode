@@ -66,6 +66,11 @@ export function createSourceMappingPlugin(
 
         // 添加单独的属性以便于查询
         addIndividualAttributes(node, sourceInfo, options);
+
+        // Check if content is static and add attribute
+        if (isStaticContent(path)) {
+          addStaticContentAttribute(node);
+        }
       }
     }
   };
@@ -247,7 +252,46 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
     ));
   };
 
-  addAttr(`${attributePrefix}-file`, sourceInfo.fileName);
-  addAttr(`${attributePrefix}-line`, sourceInfo.lineNumber);
   addAttr(`${attributePrefix}-column`, sourceInfo.columnNumber);
+}
+
+/**
+ * Check if the JSX element contains only static content
+ */
+function isStaticContent(path: NodePath): boolean {
+  const { node } = path;
+  const element = path.parent; // JSXElement
+
+  if (!t.isJSXElement(element)) return false;
+
+  return element.children.every(child => {
+    // Allow plain text
+    if (t.isJSXText(child)) return true;
+
+    // Allow expression containers with literals
+    if (t.isJSXExpressionContainer(child)) {
+      const expr = child.expression;
+      return t.isStringLiteral(expr) || t.isNumericLiteral(expr);
+    }
+
+    // Disallow everything else (nested elements, variables, function calls, etc.)
+    return false;
+  });
+}
+
+/**
+ * Add data-static-content attribute
+ */
+function addStaticContentAttribute(node: t.JSXOpeningElement) {
+  // Check if attribute already exists
+  const hasAttr = node.attributes.some(a =>
+    t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === 'data-static-content'
+  );
+
+  if (!hasAttr) {
+    node.attributes.push(t.jSXAttribute(
+      t.jSXIdentifier('data-static-content'),
+      t.stringLiteral('true')
+    ));
+  }
 }

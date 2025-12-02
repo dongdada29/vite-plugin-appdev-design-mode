@@ -346,7 +346,8 @@ export class SelectionManager {
     return {
       tagName: element.tagName.toLowerCase(),
       className: element.className || '',
-      textContent: this.getElementTextContent(element),
+      // Only return text content if element is marked as static content
+      textContent: element.hasAttribute('data-static-content') ? this.getElementTextContent(element) : '',
       sourceInfo,
     };
   }
