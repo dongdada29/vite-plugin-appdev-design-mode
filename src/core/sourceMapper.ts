@@ -55,7 +55,7 @@ export function createSourceMappingPlugin(
           attributePrefix
         };
 
-        // 添加data-source-info属性
+        // 添加源码信息属性（使用配置的前缀）
         addSourceInfoAttribute(node, sourceInfo, options);
 
         // 添加简化位置属性
@@ -69,7 +69,7 @@ export function createSourceMappingPlugin(
 
         // Check if content is static and add attribute
         if (isStaticContent(path)) {
-          addStaticContentAttribute(node);
+          addStaticContentAttribute(node, options);
         }
       }
     }
@@ -176,7 +176,7 @@ function extractStringAttribute(node: t.JSXOpeningElement, attributeName: string
 function addSourceInfoAttribute(node: t.JSXOpeningElement, sourceInfo: SourceMappingInfo, options: Required<DesignModeOptions>) {
   const { attributePrefix } = options;
 
-  // 移除现有的data-source-info属性
+  // 移除现有的源码信息属性
   node.attributes = node.attributes.filter(a =>
     !(t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === `${attributePrefix}-info`)
   );
@@ -241,7 +241,9 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
   const { attributePrefix } = options;
 
   // Helper to add attribute if it doesn't exist
-  const addAttr = (name: string, value: string | number) => {
+  const addAttr = (name: string, value: string | number | undefined) => {
+    if (value === undefined) return;
+    
     node.attributes = node.attributes.filter(a =>
       !(t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === name)
     );
@@ -252,7 +254,12 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
     ));
   };
 
+  // 添加所有单独的属性，便于查询和调试
+  addAttr(`${attributePrefix}-file`, sourceInfo.fileName);
+  addAttr(`${attributePrefix}-line`, sourceInfo.lineNumber);
   addAttr(`${attributePrefix}-column`, sourceInfo.columnNumber);
+  addAttr(`${attributePrefix}-component`, sourceInfo.componentName);
+  addAttr(`${attributePrefix}-function`, sourceInfo.functionName);
 }
 
 /**
@@ -280,17 +287,20 @@ function isStaticContent(path: NodePath): boolean {
 }
 
 /**
- * Add data-static-content attribute
+ * Add static-content attribute (使用配置的前缀)
  */
-function addStaticContentAttribute(node: t.JSXOpeningElement) {
+function addStaticContentAttribute(node: t.JSXOpeningElement, options: Required<DesignModeOptions>) {
+  const { attributePrefix } = options;
+  const attributeName = `${attributePrefix}-static-content`;
+  
   // Check if attribute already exists
   const hasAttr = node.attributes.some(a =>
-    t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === 'data-static-content'
+    t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === attributeName
   );
 
   if (!hasAttr) {
     node.attributes.push(t.jSXAttribute(
-      t.jSXIdentifier('data-static-content'),
+      t.jSXIdentifier(attributeName),
       t.stringLiteral('true')
     ));
   }
