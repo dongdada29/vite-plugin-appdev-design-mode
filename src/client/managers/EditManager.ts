@@ -30,15 +30,9 @@ export class EditManager {
     // 保存原始文本和状态
     const originalText = element.innerText;
     const originalContentEditable = element.contentEditable;
-    const originalUserSelect = element.style.userSelect;
-    const originalOutline = element.style.outline;
-    const originalOutlineOffset = element.style.outlineOffset;
 
-    // 设置 contentEditable 为 true
+    // 设置 contentEditable 为 true（不修改其他样式）
     element.contentEditable = 'true';
-    element.style.userSelect = 'text';
-    element.style.outline = '2px solid #007acc';
-    element.style.outlineOffset = '2px';
 
     // 防止 ObserverManager 干扰
     element.setAttribute('data-ignore-mutation', 'true');
@@ -54,25 +48,23 @@ export class EditManager {
     const handleSave = () => {
       const newText = element.innerText.trim();
 
-      // 恢复原始状态
-      element.contentEditable = originalContentEditable || 'inherit';
-      element.style.userSelect = originalUserSelect || '';
-      element.style.outline = originalOutline || '';
-      element.style.outlineOffset = originalOutlineOffset || '';
+      // 恢复原始状态（还原 contentEditable）
+      element.contentEditable = 'false';
 
       // 移除忽略标记
       element.removeAttribute('data-ignore-mutation');
 
       // 清理事件监听器
       element.removeEventListener('blur', handleSave);
+      element.removeEventListener('input', handleInput);
       element.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
 
-      // 如果内容有变化，更新 DOM 并发送消息通知
+      // 如果内容有变化，更新 DOM 并发送最终消息
       if (newText !== originalText.trim()) {
         element.innerText = newText;
 
-        // 发送内容变化消息到父窗口（不保存到源文件）
+        // 发送最终内容变化消息
         this.notifyContentChanged(element, newText, sourceInfo, originalText);
       }
     };
@@ -82,17 +74,15 @@ export class EditManager {
       // 恢复原始文本
       element.innerText = originalText;
 
-      // 恢复原始状态
-      element.contentEditable = originalContentEditable || 'inherit';
-      element.style.userSelect = originalUserSelect || '';
-      element.style.outline = originalOutline || '';
-      element.style.outlineOffset = originalOutlineOffset || '';
+      // 恢复原始状态（还原 contentEditable）
+      element.contentEditable = 'false';
 
       // 移除忽略标记
       element.removeAttribute('data-ignore-mutation');
 
       // 清理事件监听器
       element.removeEventListener('blur', handleSave);
+      element.removeEventListener('input', handleInput);
       element.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -102,6 +92,14 @@ export class EditManager {
       if (!element.contains(e.target as Node)) {
         handleSave();
       }
+    };
+
+    // 处理实时输入（同步到外部）
+    const handleInput = () => {
+      const currentText = element.innerText.trim();
+
+      // 实时发送内容变化消息（不终止编辑）
+      this.notifyContentChangedRealtime(element, currentText, sourceInfo, originalText);
     };
 
     // 处理键盘事件
@@ -124,6 +122,7 @@ export class EditManager {
 
     // 添加事件监听器
     element.addEventListener('blur', handleSave);
+    element.addEventListener('input', handleInput); // 实时同步
     element.addEventListener('keydown', handleKeyDown);
     // 使用 capture 阶段确保在其他点击事件之前捕获
     document.addEventListener('mousedown', handleClickOutside, true);
@@ -164,6 +163,7 @@ export class EditManager {
       status: 'pending',
       timestamp: Date.now(),
       retryCount: 0,
+      persist: false, // Default to preview only
     };
 
     return this.processUpdate(update);
@@ -189,6 +189,7 @@ export class EditManager {
       status: 'pending',
       timestamp: Date.now(),
       retryCount: 0,
+      persist: false, // Default to preview only
     };
 
     return this.processUpdate(update);
@@ -266,7 +267,6 @@ export class EditManager {
           sourceInfo: finalSourceInfo,
           oldValue: oldValue || '',
           newValue: newValue,
-          timestamp: Date.now(),
         },
         timestamp: Date.now(),
       }, '*');
@@ -278,4 +278,46 @@ export class EditManager {
       });
     }
   }
+
+  private lastRealtimeNotify: number = 0;
+  private readonly REALTIME_THROTTLE_MS = 300; // 节流间隔
+
+  /**
+   * 实时通知内容变化（带节流）
+   */
+  private notifyContentChangedRealtime(
+    element: HTMLElement,
+    newValue: string,
+    sourceInfo?: SourceInfo,
+    oldValue?: string
+  ): void {
+    const now = Date.now();
+
+    // 节流：如果距离上次通知不足 300ms，则跳过
+    if (now - this.lastRealtimeNotify < this.REALTIME_THROTTLE_MS) {
+      return;
+    }
+
+    this.lastRealtimeNotify = now;
+
+    const finalSourceInfo = sourceInfo || extractSourceInfo(element);
+    if (!finalSourceInfo) {
+      return;
+    }
+
+    // 发送实时消息到父窗口
+    if (window.self !== window.top) {
+      window.parent.postMessage({
+        type: 'CONTENT_UPDATED',
+        payload: {
+          sourceInfo: finalSourceInfo,
+          oldValue: oldValue || '',
+          newValue: newValue,
+          realtime: true, // 标记为实时更新
+        },
+        timestamp: Date.now(),
+      }, '*');
+    }
+  }
 }
+

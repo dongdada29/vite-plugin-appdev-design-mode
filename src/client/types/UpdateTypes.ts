@@ -24,6 +24,7 @@ export interface UpdateState {
   timestamp: number;
   error?: string;
   retryCount: number;
+  persist?: boolean;
 }
 
 /**

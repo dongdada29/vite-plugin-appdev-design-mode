@@ -11,7 +11,7 @@ export class UpdateService {
     private config: UpdateManagerConfig,
     private onComplete: (update: UpdateState) => void,
     private onFail: (update: UpdateState) => void
-  ) {}
+  ) { }
 
   /**
    * Process a single update
@@ -35,8 +35,14 @@ export class UpdateService {
       // Apply DOM update
       this.applyUpdateToDOM(update);
 
-      // Save to source via API
-      const serverResponse = await this.saveToSource(update);
+      let serverResponse;
+      // Save to source via API (only if persist is true)
+      if (update.persist) {
+        serverResponse = await this.saveToSource(update);
+      } else {
+        console.log('[UpdateService] Preview only, skipping save to source');
+        serverResponse = { success: true, preview: true };
+      }
 
       // Mark as completed
       update.status = 'completed';

@@ -302,39 +302,10 @@ export class UpdateManager {
   private showContextMenu(element: HTMLElement, x: number, y: number, isSelected: boolean) {
     const menuItems: MenuItem[] = [];
 
-    // 如果是已选中元素，添加"取消选中"选项
-    if (isSelected) {
-      menuItems.push({
-        label: '取消选中',
-        action: () => {
-          if (this.selectElementCallback) {
-            this.selectElementCallback(null);
-          }
-        },
-      });
-    } else {
-      // 如果是 hover 元素，添加"选中"选项
-      menuItems.push({
-        label: '选中',
-        action: () => {
-          if (this.selectElementCallback) {
-            this.selectElementCallback(element);
-          }
-        },
-      });
-    }
-
-    // 添加分隔线（如果有其他菜单项）
-    menuItems.push({
-      label: '---',
-      action: () => { },
-      disabled: true,
-    });
-
-    // 添加其他菜单项
+    // 添加其他菜单项（移除了选中/取消选中逻辑）
     menuItems.push(
       {
-        label: 'Add to Chat',
+        label: '添加到传话',
         action: () => this.addToChat(element),
       },
       {
