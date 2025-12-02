@@ -55,10 +55,8 @@ export default function HomePage() {
           </p>
         </div>
       </div>
-
-2
       <div className="bg-white rounded-xl shadow-xl p-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">立即体验22232</h2>
+3111
         <div className="space-y-4">
           <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
             <h3 className="text-xl font-semibold text-blue-900 mb-2">可编辑卡片</h3>

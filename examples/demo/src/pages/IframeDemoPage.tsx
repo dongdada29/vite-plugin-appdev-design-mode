@@ -416,18 +416,20 @@ export default function IframeDemoPage() {
                   </div>
                 </div>
 
-                {/* Content Editor */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-2'>
-                    内容编辑
-                  </label>
-                  <textarea
-                    value={editingContent}
-                    onChange={e => setEditingContent(e.target.value)}
-                    className='w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
-                    rows={3}
-                  />
-                </div>
+                {/* Content Editor - 仅当 isStaticText 为 true 时显示 */}
+                {selectedElement.isStaticText && (
+                  <div>
+                    <label className='block text-sm font-medium text-gray-700 mb-2'>
+                      内容编辑
+                    </label>
+                    <textarea
+                      value={editingContent}
+                      onChange={e => setEditingContent(e.target.value)}
+                      className='w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+                      rows={3}
+                    />
+                  </div>
+                )}
 
                 <hr className="border-gray-200" />
 
