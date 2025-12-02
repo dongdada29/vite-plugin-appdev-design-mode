@@ -11,7 +11,7 @@ export interface ElementInfo {
   className: string;
   textContent: string;
   sourceInfo: SourceInfo;
-  isStaticText?: boolean;
+  isStaticText: boolean;
 }
 
 // 消息验证相关类型

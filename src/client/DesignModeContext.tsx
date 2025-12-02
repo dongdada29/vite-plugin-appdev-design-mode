@@ -677,6 +677,9 @@ export const DesignModeProvider: React.FC<{
           try {
             const sourceInfo = JSON.parse(sourceInfoStr);
 
+            // 判断是否为静态文本：检查元素是否有 static-content 属性
+            const isStaticText = element.hasAttribute(AttributeNames.staticContent);
+
             const elementInfo: ElementInfo = {
               tagName: element.tagName.toLowerCase(),
               className: element.className,
@@ -686,15 +689,16 @@ export const DesignModeProvider: React.FC<{
                 lineNumber: sourceInfo.lineNumber,
                 columnNumber: sourceInfo.columnNumber,
               },
+              isStaticText: isStaticText || false, // 默认为 false
             };
-
+            
             sendToParent({
               type: 'ELEMENT_SELECTED',
               payload: { elementInfo },
               timestamp: Date.now(),
             });
 
-            console.log('[DesignMode] Sent ELEMENT_SELECTED to parent');
+            console.log('[DesignMode] Sent ELEMENT_SELECTED to parent', elementInfo);
           } catch (e) {
             console.warn('Failed to parse source info:', e);
           }

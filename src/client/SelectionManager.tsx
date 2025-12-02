@@ -343,13 +343,17 @@ export class SelectionManager {
     const rect = element.getBoundingClientRect();
     const computedStyle = window.getComputedStyle(element);
 
+    // 判断是否为静态文本：检查元素是否有 static-content 属性
+    const isStaticText = element.hasAttribute(AttributeNames.staticContent);
+
     // Note: elementId is not part of ElementInfo anymore
     return {
       tagName: element.tagName.toLowerCase(),
       className: element.className || '',
       // Only return text content if element is marked as static content
-      textContent: element.hasAttribute(AttributeNames.staticContent) ? this.getElementTextContent(element) : '',
+      textContent: isStaticText ? this.getElementTextContent(element) : '',
       sourceInfo,
+      isStaticText: isStaticText || false, // 默认为 false
     };
   }
 

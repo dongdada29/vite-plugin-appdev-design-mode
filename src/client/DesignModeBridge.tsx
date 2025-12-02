@@ -86,6 +86,9 @@ export const DesignModeBridge: React.FC = () => {
         });
 
         // 确保我们有有效的元素数据
+        // 判断是否为静态文本：检查元素是否有 static-content 属性
+        const isStaticText = selectedElement.hasAttribute(AttributeNames.staticContent);
+        
         const elementData = {
           tagName: selectedElement.tagName.toLowerCase(),
           className: selectedElement.className || '',
@@ -99,6 +102,7 @@ export const DesignModeBridge: React.FC = () => {
             lineNumber: parseInt(sourceLine || '0', 10),
             columnNumber: parseInt(sourceColumn || '0', 10),
           },
+          isStaticText: isStaticText || false, // 默认为 false
         };
 
         console.log(
