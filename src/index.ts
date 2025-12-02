@@ -160,6 +160,33 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         return {};
       }
 
+      // 获取项目根目录（Vite 默认是 process.cwd()）
+      const projectRoot = config.root ?? process.cwd();
+      
+      // 合并用户已有的 fs.allow 配置
+      const existingAllow = config.server?.fs?.allow || [];
+      const pluginDistPath = resolve(__dirname, '..');
+      
+      // 构建允许访问的目录列表（使用 Set 自动去重）
+      const allowedPaths = new Set<string>();
+      
+      // 添加用户已有的配置（保留用户自定义的路径）
+      existingAllow.forEach((path: string) => {
+        // 规范化路径，确保使用绝对路径
+        const normalizedPath = resolve(path);
+        allowedPaths.add(normalizedPath);
+      });
+      
+      // 添加项目根目录（必需，用于访问项目源码）
+      allowedPaths.add(resolve(projectRoot));
+      
+      // 添加 node_modules 目录（通常也需要访问）
+      const nodeModulesPath = resolve(projectRoot, 'node_modules');
+      allowedPaths.add(nodeModulesPath);
+      
+      // 添加插件的 dist 目录（用于加载客户端代码）
+      allowedPaths.add(pluginDistPath);
+
       return {
         define: {
           __APPDEV_DESIGN_MODE__: true,
@@ -174,10 +201,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         },
         server: {
           fs: {
-            allow: [
-              // 允许访问插件的 dist 目录
-              resolve(__dirname, '..'),
-            ],
+            // 合并用户配置和插件必需的路径
+            allow: Array.from(allowedPaths),
           },
         },
       };
