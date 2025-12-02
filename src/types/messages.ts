@@ -142,6 +142,24 @@ export interface AddToChatMessage {
   timestamp?: number;
 }
 
+// Copy Element Message
+export interface CopyElementMessage {
+  type: 'COPY_ELEMENT';
+  payload: {
+    elementInfo: {
+      tagName: string;
+      className: string;
+      content: string;
+      sourceInfo?: SourceInfo;
+    };
+    textContent: string; // 用于剪贴板的 JSON 字符串
+    success: boolean; // 是否拷贝成功
+    error?: string; // 如果失败，错误信息
+  };
+  requestId?: string;
+  timestamp?: number;
+}
+
 // 新增：错误处理消息
 export interface ErrorMessage {
   type: 'ERROR';
@@ -210,7 +228,8 @@ export type IframeToParentMessage =
   | HeartbeatMessage
   | HealthCheckResponseMessage
   | BridgeReadyMessage
-  | AddToChatMessage;
+  | AddToChatMessage
+  | CopyElementMessage;
 
 export type ParentToIframeMessage =
   | ToggleDesignModeMessage

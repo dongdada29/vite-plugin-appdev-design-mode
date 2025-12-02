@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useDesignMode } from './DesignModeContext';
-import { SourceInfo } from '../types/messages';
+import { SourceInfo, AddToChatMessage, CopyElementMessage } from '../types/messages';
 import { extractSourceInfo, hasSourceMapping } from './utils/sourceInfo';
 import { isPureStaticText } from './utils/elementUtils';
 import { showContextMenu, MenuItem } from './ui/ContextMenu';
@@ -9,6 +9,7 @@ import { HistoryManager } from './managers/HistoryManager';
 import { ObserverManager } from './managers/ObserverManager';
 import { EditManager } from './managers/EditManager';
 import { UpdateService } from './services/UpdateService';
+import { bridge } from './bridge';
 
 
 
@@ -334,12 +335,45 @@ export class UpdateManager {
       tagName: element.tagName.toLowerCase(),
       className: element.className,
       content: content,
-      sourceInfo: sourceInfo
+      sourceInfo: sourceInfo ?? undefined // 将 null 转换为 undefined
     };
 
     const textToCopy = JSON.stringify(elementInfo, null, 2);
 
-    // Try to copy to clipboard
+    // 发送拷贝消息的辅助函数
+    const sendCopyMessage = (success: boolean, error?: string) => {
+      const message: CopyElementMessage = {
+        type: 'COPY_ELEMENT',
+        payload: {
+          elementInfo: {
+            tagName: elementInfo.tagName,
+            className: elementInfo.className,
+            content: elementInfo.content,
+            sourceInfo: elementInfo.sourceInfo
+          },
+          textContent: textToCopy, // 用于剪贴板的 JSON 字符串
+          success, // 是否拷贝成功
+          error // 如果失败，错误信息
+        },
+        timestamp: Date.now()
+      };
+
+      // 如果在 iframe 环境中，通过 bridge 发送消息到父窗口
+      // 否则直接使用 window.postMessage（主窗口环境）
+      if (typeof window !== 'undefined' && window.self !== window.top) {
+        // iframe 环境：通过 bridge 发送到父窗口
+        bridge.send(message).catch(error => {
+          console.error('[UpdateManager] Failed to send COPY_ELEMENT via bridge:', error);
+          // 如果 bridge 发送失败，回退到直接使用 postMessage
+          window.parent.postMessage(message, '*');
+        });
+      } else {
+        // 主窗口环境：直接使用 postMessage
+        window.postMessage(message, '*');
+      }
+    };
+
+    // Try to copy to clipboard (本地也尝试复制)
     if (navigator.clipboard) {
       navigator.clipboard.writeText(textToCopy).then(() => {
         let alertMessage = '已复制元素信息到剪贴板:\n\n';
@@ -352,14 +386,22 @@ export class UpdateManager {
         alertMessage += `类名: ${elementInfo.className}\n`;
         alertMessage += `内容: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`;
 
-        alert(alertMessage);
+        console.log('[UpdateManager] Copy element:', alertMessage);
+        
+        // 拷贝成功，发送成功消息
+        sendCopyMessage(true);
       }).catch(err => {
+        const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('[UpdateManager] Failed to copy to clipboard:', err);
-        alert('复制失败，请查看控制台');
+        
+        // 拷贝失败，发送失败消息
+        sendCopyMessage(false, errorMessage);
       });
     } else {
       console.log('[UpdateManager] Element info:', elementInfo);
-      alert('浏览器不支持剪贴板 API，信息已输出到控制台');
+      
+      // 浏览器不支持剪贴板 API，发送失败消息
+      sendCopyMessage(false, '浏览器不支持剪贴板 API');
     }
   }
 
@@ -370,24 +412,47 @@ export class UpdateManager {
     const sourceInfo = extractSourceInfo(element);
     const content = element.innerText || element.textContent || '';
 
-    console.log('[UpdateManager] Adding to chat:', { content, sourceInfo });
+    // console.log('[UpdateManager] Adding to chat:', { content, sourceInfo });
 
-    // Send ADD_TO_CHAT message via window postMessage
-    window.postMessage({
+    // 构建 ADD_TO_CHAT 消息
+    // 将 null 转换为 undefined，因为 AddToChatMessage 期望 undefined 而不是 null
+    const contextSourceInfo = sourceInfo ?? undefined;
+    
+    // 如果 sourceInfo 存在，构建完整的 elementInfo（包含必需的 sourceInfo 和 isStaticText）
+    // 如果 sourceInfo 不存在，则不提供 elementInfo
+    const elementInfo = sourceInfo ? {
+      tagName: element.tagName.toLowerCase(),
+      className: element.className,
+      textContent: content,
+      sourceInfo, // ElementInfo 要求 sourceInfo 是必需的
+      isStaticText: isPureStaticText(element)
+    } : undefined;
+
+    const message: AddToChatMessage = {
       type: 'ADD_TO_CHAT',
       payload: {
         content,
         context: {
-          sourceInfo,
-          elementInfo: {
-            tagName: element.tagName.toLowerCase(),
-            className: element.className,
-            textContent: content
-          }
+          sourceInfo: contextSourceInfo,
+          elementInfo
         }
       },
       timestamp: Date.now()
-    }, '*');
+    };
+
+    // 如果在 iframe 环境中，通过 bridge 发送消息到父窗口
+    // 否则直接使用 window.postMessage（主窗口环境）
+    if (typeof window !== 'undefined' && window.self !== window.top) {
+      // iframe 环境：通过 bridge 发送到父窗口
+      bridge.send(message).catch(error => {
+        console.error('[UpdateManager] Failed to send ADD_TO_CHAT via bridge:', error);
+        // 如果 bridge 发送失败，回退到直接使用 postMessage
+        window.parent.postMessage(message, '*');
+      });
+    } else {
+      // 主窗口环境：直接使用 postMessage
+      window.postMessage(message, '*');
+    }
 
     // Format alert message with source info
     let alertMessage = '已添加到聊天:\n\n';
@@ -398,7 +463,7 @@ export class UpdateManager {
     }
     alertMessage += `内容:\n${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`;
 
-    alert(alertMessage);
+    console.log('[UpdateManager] Add to chat:', alertMessage);
   }
 
   /**
