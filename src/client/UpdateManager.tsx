@@ -97,7 +97,7 @@ export class UpdateManager {
     document.addEventListener('contextmenu', this.handleContextMenu.bind(this));
 
     // 键盘快捷键
-    document.addEventListener('keydown', this.handleKeyDown.bind(this));
+    // document.addEventListener('keydown', this.handleKeyDown.bind(this));
   }
 
 
@@ -455,9 +455,10 @@ export class UpdateManager {
   public updateContent(
     element: HTMLElement,
     newContent: string,
-    sourceInfo: SourceInfo
+    sourceInfo?: SourceInfo,
+    oldValue?: string
   ): Promise<UpdateResult> {
-    return this.editManager.updateContent(element, newContent, sourceInfo);
+    return this.editManager.updateContent(element, newContent, sourceInfo, oldValue);
   }
 
   /**

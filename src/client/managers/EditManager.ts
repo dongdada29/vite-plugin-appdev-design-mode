@@ -2,7 +2,6 @@ import { UpdateState, UpdateResult, UpdateOperation, UpdateManagerConfig } from 
 import { SourceInfo } from '../../types/messages';
 import { extractSourceInfo, hasSourceMapping } from '../utils/sourceInfo';
 import { isPureStaticText } from '../utils/elementUtils';
-import { enterEditMode, exitEditMode } from '../ui/EditModeUI';
 
 export class EditManager {
   constructor(
@@ -22,111 +21,121 @@ export class EditManager {
   }
 
   /**
-   * Edit text content
+   * Edit text content using contentEditable
    */
   public async editTextContent(element: HTMLElement) {
     const sourceInfo = extractSourceInfo(element);
     if (!sourceInfo) return;
 
+    // 保存原始文本和状态
     const originalText = element.innerText;
+    const originalContentEditable = element.contentEditable;
+    const originalUserSelect = element.style.userSelect;
+    const originalOutline = element.style.outline;
+    const originalOutlineOffset = element.style.outlineOffset;
 
-    const textArea = enterEditMode({
-      element,
-      initialValue: originalText,
-      onSave: (newText) => {
-        if (newText !== originalText) {
-          element.innerText = newText;
-          this.updateContent(element, newText, sourceInfo);
-        }
-        exitEditMode(textArea);
-      },
-      onCancel: () => {
-        exitEditMode(textArea);
+    // 设置 contentEditable 为 true
+    element.contentEditable = 'true';
+    element.style.userSelect = 'text';
+    element.style.outline = '2px solid #007acc';
+    element.style.outlineOffset = '2px';
+
+    // 选中所有文本
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    // 处理保存
+    const handleSave = () => {
+      const newText = element.innerText.trim();
+      
+      // 恢复原始状态
+      element.contentEditable = originalContentEditable || 'inherit';
+      element.style.userSelect = originalUserSelect || '';
+      element.style.outline = originalOutline || '';
+      element.style.outlineOffset = originalOutlineOffset || '';
+
+      // 清理事件监听器
+      element.removeEventListener('blur', handleSave);
+      element.removeEventListener('keydown', handleKeyDown);
+
+      // 如果内容有变化，更新内容
+      if (newText !== originalText.trim()) {
+        element.innerText = newText;
+        this.updateContent(element, newText, sourceInfo, originalText);
       }
-    });
+    };
+
+    // 处理取消
+    const handleCancel = () => {
+      // 恢复原始文本
+      element.innerText = originalText;
+      
+      // 恢复原始状态
+      element.contentEditable = originalContentEditable || 'inherit';
+      element.style.userSelect = originalUserSelect || '';
+      element.style.outline = originalOutline || '';
+      element.style.outlineOffset = originalOutlineOffset || '';
+
+      // 清理事件监听器
+      element.removeEventListener('blur', handleSave);
+      element.removeEventListener('keydown', handleKeyDown);
+    };
+
+    // 处理键盘事件
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        element.blur(); // 触发 blur 事件，从而触发保存
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleCancel();
+      }
+    };
+
+    // 添加事件监听器
+    element.addEventListener('blur', handleSave);
+    element.addEventListener('keydown', handleKeyDown);
+
+    // 聚焦元素
+    element.focus();
   }
 
   /**
    * Update content
+   * @param element - 要更新的元素
+   * @param newValue - 新值
+   * @param sourceInfo - 源代码信息（如果未提供，则从元素中提取）
+   * @param oldValue - 旧值（如果未提供，则从元素中获取）
    */
   public async updateContent(
     element: HTMLElement,
     newValue: string,
-    sourceInfo: SourceInfo
+    sourceInfo?: SourceInfo,
+    oldValue?: string
   ): Promise<UpdateResult> {
+    // 如果没有提供 sourceInfo，尝试从元素中提取
+    const finalSourceInfo = sourceInfo || extractSourceInfo(element);
+    if (!finalSourceInfo) {
+      throw new Error('Cannot update content: no source info available');
+    }
+
+    // 如果没有提供 oldValue，从元素中获取（注意：此时元素可能已经更新）
+    const finalOldValue = oldValue ?? element.innerText;
+
     const update: UpdateState = {
       id: this.generateUpdateId(),
       operation: 'content_update',
-      sourceInfo,
+      sourceInfo: finalSourceInfo,
       element,
-      oldValue: element.innerText, // Note: this might be the new value if already updated in DOM?
-      // In UpdateManager.editTextContent, we updated DOM before calling updateContent?
-      // No, in the new implementation:
-      // element.innerText = newText;
-      // this.updateContent(element, newText, ...);
-      // So element.innerText IS the new value.
-      // We should probably pass oldValue explicitly or capture it before.
-      // But updateContent in UpdateManager took newValue.
-      // Let's check UpdateManager.updateContent implementation.
+      oldValue: finalOldValue,
       newValue,
       status: 'pending',
       timestamp: Date.now(),
       retryCount: 0,
     };
-
-    // Fix oldValue: if DOM is already updated, we can't get oldValue from it.
-    // But we don't pass oldValue to updateContent.
-    // UpdateManager.updateContent:
-    /*
-      public async updateContent(element: HTMLElement, newValue: string, sourceInfo: SourceInfo) {
-        const update: UpdateState = {
-            // ...
-            oldValue: element.innerText, // This is WRONG if element is already updated!
-            newValue,
-            // ...
-        }
-        return this.processUpdate(update);
-      }
-    */
-    // Wait, in editTextContent:
-    /*
-        if (newText !== originalText) {
-          element.innerText = newText; // DOM updated!
-          this.updateContent(element, newText, ...); // Called after DOM update
-        }
-    */
-    // So element.innerText IS newText.
-    // So oldValue is lost?
-    // This looks like a bug in the current implementation (or I introduced it).
-    // In the original code:
-    /*
-      const handleSave = () => {
-        const newText = textArea.value;
-        if (newText !== originalText) {
-          element.innerText = newText;
-          this.updateContent(element, newText, extractSourceInfo(element)!);
-        }
-    */
-    // And updateContent:
-    /*
-      const update: UpdateState = {
-        // ...
-        oldValue: element.innerText, // !!!
-        newValue,
-      }
-    */
-    // Yes, `oldValue` would be `newValue`.
-    // This means undo would set it to `newValue` (no change).
-    // This is a bug.
-    // I should fix this in EditManager.
-    // I will pass `oldValue` to `updateContent` if possible, or `EditManager` should handle it.
-    // `editTextContent` has `originalText`.
-
-    // I will modify `updateContent` signature to accept `oldValue`.
-    // But `handleDirectEdit` calls `updateContent` too?
-    // `handleDirectEdit` calls `editTextContent`.
-
-    // What about `editStyle`?
 
     return this.processUpdate(update);
   }
