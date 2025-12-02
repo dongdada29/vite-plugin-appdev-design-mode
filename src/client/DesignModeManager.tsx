@@ -35,6 +35,9 @@ export const DesignModeManager: React.FC = () => {
       selectElement(target);
     };
 
+    // Double-click handling is now managed by UpdateManager → EditManager
+    // This prevents conflicts and ensures data-ignore-mutation is properly set
+    /*
     const handleDoubleClick = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
       if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
@@ -118,15 +121,16 @@ export const DesignModeManager: React.FC = () => {
           target.blur(); // Will trigger handleBlur
         }
         if (e.key === 'Escape') {
-          // Cancel?
-          // For now, just blur.
-          target.blur();
+          e.preventDefault();
+          target.innerText = originalContent;
+          cleanup();
         }
       };
 
       target.addEventListener('blur', handleBlur);
       target.addEventListener('keydown', handleKeyDown);
     };
+    */
 
     const handleMouseOver = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
@@ -145,7 +149,7 @@ export const DesignModeManager: React.FC = () => {
     };
 
     document.addEventListener('click', handleClick, true);
-    document.addEventListener('dblclick', handleDoubleClick, true);
+    // document.addEventListener('dblclick', handleDoubleClick, true);
     document.addEventListener('mouseover', handleMouseOver);
     document.addEventListener('mouseout', handleMouseOut);
 
@@ -185,7 +189,7 @@ export const DesignModeManager: React.FC = () => {
       }
 
       document.removeEventListener('click', handleClick, true);
-      document.removeEventListener('dblclick', handleDoubleClick, true);
+      // document.removeEventListener('dblclick', handleDoubleClick, true);
       document.removeEventListener('mouseover', handleMouseOver);
       document.removeEventListener('mouseout', handleMouseOut);
 

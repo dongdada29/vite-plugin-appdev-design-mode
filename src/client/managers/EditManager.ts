@@ -40,6 +40,9 @@ export class EditManager {
     element.style.outline = '2px solid #007acc';
     element.style.outlineOffset = '2px';
 
+    // 防止 ObserverManager 干扰
+    element.setAttribute('data-ignore-mutation', 'true');
+
     // 选中所有文本
     const range = document.createRange();
     range.selectNodeContents(element);
@@ -50,21 +53,27 @@ export class EditManager {
     // 处理保存
     const handleSave = () => {
       const newText = element.innerText.trim();
-      
+
       // 恢复原始状态
       element.contentEditable = originalContentEditable || 'inherit';
       element.style.userSelect = originalUserSelect || '';
       element.style.outline = originalOutline || '';
       element.style.outlineOffset = originalOutlineOffset || '';
 
+      // 移除忽略标记
+      element.removeAttribute('data-ignore-mutation');
+
       // 清理事件监听器
       element.removeEventListener('blur', handleSave);
       element.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
 
-      // 如果内容有变化，更新内容
+      // 如果内容有变化，更新 DOM 并发送消息通知
       if (newText !== originalText.trim()) {
         element.innerText = newText;
-        this.updateContent(element, newText, sourceInfo, originalText);
+
+        // 发送内容变化消息到父窗口（不保存到源文件）
+        this.notifyContentChanged(element, newText, sourceInfo, originalText);
       }
     };
 
@@ -72,23 +81,41 @@ export class EditManager {
     const handleCancel = () => {
       // 恢复原始文本
       element.innerText = originalText;
-      
+
       // 恢复原始状态
       element.contentEditable = originalContentEditable || 'inherit';
       element.style.userSelect = originalUserSelect || '';
       element.style.outline = originalOutline || '';
       element.style.outlineOffset = originalOutlineOffset || '';
 
+      // 移除忽略标记
+      element.removeAttribute('data-ignore-mutation');
+
       // 清理事件监听器
       element.removeEventListener('blur', handleSave);
       element.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+
+    // 处理点击外部
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!element.contains(e.target as Node)) {
+        handleSave();
+      }
     };
 
     // 处理键盘事件
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        element.blur(); // 触发 blur 事件，从而触发保存
+      if (e.key === 'Enter') {
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl+Enter or Cmd+Enter: insert newline (allow default behavior)
+          // Don't prevent default - let the browser insert the newline
+          return;
+        } else {
+          // Plain Enter: save and exit
+          e.preventDefault();
+          element.blur(); // 触发 blur 事件，从而触发保存
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
         handleCancel();
@@ -98,6 +125,8 @@ export class EditManager {
     // 添加事件监听器
     element.addEventListener('blur', handleSave);
     element.addEventListener('keydown', handleKeyDown);
+    // 使用 capture 阶段确保在其他点击事件之前捕获
+    document.addEventListener('mousedown', handleClickOutside, true);
 
     // 聚焦元素
     element.focus();
@@ -207,7 +236,46 @@ export class EditManager {
     console.log('[EditManager] Opening attribute editor for:', element);
   }
 
+  /**
+   * 生成唯一更新ID
+   */
   private generateUpdateId(): string {
-    return `update_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `update-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * 通知内容变化（不保存到源文件，只发送消息）
+   */
+  private notifyContentChanged(
+    element: HTMLElement,
+    newValue: string,
+    sourceInfo?: SourceInfo,
+    oldValue?: string
+  ): void {
+    const finalSourceInfo = sourceInfo || extractSourceInfo(element);
+    if (!finalSourceInfo) {
+      console.warn('[EditManager] Cannot notify: no source info available');
+      return;
+    }
+
+    // 发送消息到父窗口（如果在 iframe 中）
+    if (window.self !== window.top) {
+      window.parent.postMessage({
+        type: 'CONTENT_UPDATED',
+        payload: {
+          sourceInfo: finalSourceInfo,
+          oldValue: oldValue || '',
+          newValue: newValue,
+          timestamp: Date.now(),
+        },
+        timestamp: Date.now(),
+      }, '*');
+
+      console.log('[EditManager] Content updated (preview only):', {
+        sourceInfo: finalSourceInfo,
+        old: oldValue,
+        new: newValue
+      });
+    }
   }
 }
