@@ -40,6 +40,13 @@ export default function IframeDemoPage() {
           data: event.data
         });
       }
+      if (event.data.type === 'ADD_TO_CHAT') {
+        return console.log('[Parent] Add to chat:', event.data.payload);
+      }
+
+      if (event.data.type === 'COPY_ELEMENT') {
+        return console.log('[Parent] Copy element:', event.data.payload);
+      }
 
       // Only accept messages from the iframe
       if (iframeRef.current && event.source !== iframeRef.current.contentWindow) {
@@ -89,6 +96,7 @@ export default function IframeDemoPage() {
         case 'STYLE_UPDATED':
           console.log('[Parent] Style updated:', payload);
           break;
+        
       }
     };
 
