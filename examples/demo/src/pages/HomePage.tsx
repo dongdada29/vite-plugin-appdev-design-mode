@@ -1,16 +1,19 @@
 import React from 'react';
 
 export default function HomePage() {
+  const title = "欢迎使用设计模式";
+  const content = "体验实时可视化编辑，自动更新源代码。";
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* 主标题区域 */}
       <div className="text-center mb-16">
         <h1 className="text-5xl font-bold text-gray-900 mb-4">
-          欢迎使用设计模式12
+          你好，{title}
         </h1>
         <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-          体验实时可视化编辑，自动更新源代码。
+          {content}
           点击右下角的设计模式开关即可开始！
+          {'--变量测试--'}
         </p>
       </div>
 

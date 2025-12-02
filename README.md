@@ -120,15 +120,19 @@ export default defineConfig({
 
 ## 生成属性
 
-插件处理的元素将具有以下属性：
+插件处理的元素将具有以下属性（默认前缀为 `data-source`，可通过 `attributePrefix` 配置项自定义）：
 
-- `data-source-file`: 源码文件路径
-- `data-source-line`: 源码行号
-- `data-source-column`: 源码列号
-- `data-source-info`: 包含完整源码映射信息的JSON字符串
-- `data-source-element-id`: 唯一元素标识符，格式为`文件路径:行号:列号_标签名_类名或ID`
-- `data-source-component`: 组件名称（如果适用）
-- `data-source-function`: 函数名称（如果适用）
+- `{prefix}-file`: 源码文件路径
+- `{prefix}-line`: 源码行号
+- `{prefix}-column`: 源码列号
+- `{prefix}-info`: 包含完整源码映射信息的JSON字符串
+- `{prefix}-element-id`: 唯一元素标识符，格式为`文件路径:行号:列号_标签名_类名或ID`
+- `{prefix}-component`: 组件名称（如果适用）
+- `{prefix}-function`: 函数名称（如果适用）
+- `{prefix}-position`: 位置信息，格式为`行号:列号`
+- `{prefix}-static-content`: 标记元素是否包含纯静态内容（值为 `'true'`），用于判断元素是否可以直接编辑
+
+**注意**：这些属性使用可配置的前缀，默认值为 `data-source`。通过设置 `attributePrefix` 选项，可以避免与用户自定义的 `data-*` 属性冲突。例如，设置 `attributePrefix: 'data-appdev'` 后，属性名将变为 `data-appdev-file`、`data-appdev-line`、`data-appdev-static-content` 等。
 
 ## 浏览器集成
 
