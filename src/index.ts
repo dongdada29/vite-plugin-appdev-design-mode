@@ -42,9 +42,9 @@ export interface DesignModeOptions {
 const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
   enabled: true,
   enableInProduction: false,
-  attributePrefix: 'data-source',
+  attributePrefix: 'data-__xagi',
   verbose: true,
-  exclude: ['node_modules', 'dist', 'src/components/ui'],
+  exclude: ['node_modules', 'dist'],
   include: ['src/**/*.{ts,js,tsx,jsx}'],
 };
 
@@ -245,6 +245,17 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       return {
         html,
         tags: [
+          // 注入配置到全局变量，供客户端代码使用
+          {
+            tag: 'script',
+            attrs: {
+              type: 'text/javascript',
+            },
+            injectTo: 'head',
+            children: `window.__APPDEV_DESIGN_MODE_CONFIG__ = ${JSON.stringify({
+              attributePrefix: options.attributePrefix,
+            })};`,
+          },
           {
             tag: 'script',
             attrs: {
