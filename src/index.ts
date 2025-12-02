@@ -43,9 +43,9 @@ const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
   enabled: true,
   enableInProduction: false,
   attributePrefix: 'data-source',
-  verbose: false,
-  exclude: ['node_modules', '.git'],
-  include: ['**/*.{js,jsx,ts,tsx}'],
+  verbose: true,
+  exclude: ['node_modules', 'dist', 'src/components/ui'],
+  include: ['src/**/*.{ts,js,tsx,jsx}'],
 };
 
 import { fileURLToPath } from 'url';
@@ -63,6 +63,21 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
   // 保存 base 配置，用于构建正确的客户端代码路径
   let basePath = '/';
+  // 保存当前命令（serve 或 build），用于判断是否为开发环境
+  let currentCommand: 'serve' | 'build' = 'serve';
+
+  // 检查插件是否应该生效
+  // 仅在开发环境（serve）或明确启用生产环境时生效
+  const isPluginEnabled = () => {
+    if (!options.enabled) {
+      return false;
+    }
+    // 如果是构建模式且未启用生产环境支持，则禁用插件
+    if (currentCommand === 'build' && !options.enableInProduction) {
+      return false;
+    }
+    return true;
+  };
 
   return {
     name: '@xagi/vite-plugin-design-mode',
@@ -70,6 +85,10 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
     // 解析虚拟模块 ID
     resolveId(id) {
+      // 如果插件未启用，不处理虚拟模块
+      if (!isPluginEnabled()) {
+        return null;
+      }
       if (id === VIRTUAL_CLIENT_MODULE_ID) {
         return RESOLVED_VIRTUAL_CLIENT_MODULE_ID;
       }
@@ -78,6 +97,10 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
     // 加载虚拟模块内容
     load(id) {
+      // 如果插件未启用，不加载虚拟模块
+      if (!isPluginEnabled()) {
+        return null;
+      }
       if (id === RESOLVED_VIRTUAL_CLIENT_MODULE_ID) {
         const clientEntryPath = resolveClientEntryPath();
         if (!existsSync(clientEntryPath)) {
@@ -105,6 +128,9 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
     },
 
     config(config, { command }) {
+      // 保存当前命令，用于后续判断
+      currentCommand = command;
+      
       // 保存 base 配置，确保路径正确
       basePath = config.base || '/';
       // 规范化 base 路径：确保以 / 开头和结尾（除非是根路径）
@@ -116,10 +142,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       }
 
       // 只在开发模式启用
-      if (
-        !options.enabled ||
-        (command === 'build' && !options.enableInProduction)
-      ) {
+      if (!isPluginEnabled()) {
         return {};
       }
 
@@ -130,6 +153,10 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         },
         esbuild: {
           logOverride: { 'this-is-undefined-in-esm': 'silent' },
+        },
+        optimizeDeps: {
+          // 确保 React 和 ReactDOM 被正确预构建
+          include: ['react', 'react-dom'],
         },
         server: {
           fs: {
@@ -143,10 +170,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
     },
 
     configureServer(server) {
-      if (
-        !options.enabled ||
-        (server.config.command === 'build' && !options.enableInProduction)
-      ) {
+      // 如果插件未启用，不配置服务器中间件
+      if (!isPluginEnabled()) {
         return;
       }
 
@@ -164,6 +189,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
           try {
             // 使用虚拟模块 ID 来加载已打包的客户端代码
             // 虚拟模块的 load hook 会使用 esbuild 打包所有依赖
+            // 通过 ssr: false 确保使用浏览器环境，React 会从项目的 node_modules 解析
+            // Vite 会自动从项目的依赖中解析 React 和 ReactDOM（因为它们现在是 peerDependencies）
             const result = await server.transformRequest(
               VIRTUAL_CLIENT_MODULE_ID,
               { ssr: false }
@@ -204,7 +231,10 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
     },
 
     transformIndexHtml(html, ctx) {
-      if (!options.enabled) return html;
+      // 如果插件未启用，不注入客户端脚本
+      if (!isPluginEnabled()) {
+        return html;
+      }
 
       // 构建基于 base 路径的客户端代码 URL
       // 确保路径相对于 base 配置，支持子路径部署
@@ -228,7 +258,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
     },
 
     async transform(code, id, transformOptions) {
-      if (!options.enabled) {
+      // 如果插件未启用，不执行任何代码转换
+      if (!isPluginEnabled()) {
         return code;
       }
 
@@ -238,6 +269,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         const result = await transformWithEsbuild(code, id, {
           loader: 'tsx',
           jsx: 'automatic',
+          // 确保 React 和 ReactDOM 被正确解析
+          format: 'esm',
         });
         return result.code;
       }
