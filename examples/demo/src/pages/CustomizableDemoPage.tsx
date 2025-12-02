@@ -228,6 +228,9 @@ export default function CustomizableDemoPage() {
                   this.style.outlineOffset = '2px';
 
                   // 发送选中消息到父窗口
+                  // 判断是否为静态文本：检查元素是否有 static-content 属性
+                  const isStaticText = this.hasAttribute('data-source-static-content');
+                  
                   const elementInfo = {
                     tagName: this.tagName.toLowerCase(),
                     className: this.className || '',
@@ -236,7 +239,8 @@ export default function CustomizableDemoPage() {
                       fileName: this.getAttribute('data-source-file'),
                       lineNumber: parseInt(this.getAttribute('data-source-line')),
                       columnNumber: parseInt(this.getAttribute('data-source-column'))
-                    }
+                    },
+                    isStaticText: isStaticText || false // 默认为 false
                   };
 
                   window.parent.postMessage({

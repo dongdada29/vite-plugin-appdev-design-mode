@@ -1,6 +1,6 @@
 {
   "name": "@xagi/vite-plugin-design-mode",
-  "version": "1.0.8",
+  "version": "1.0.11",
   "description": "Vite plugin for Design Mode - enables visual editing of React components with source mapping",
   "type": "module",
   "main": "./dist/index.es.js",
@@ -16,6 +16,9 @@
     "dist",
     "README.md"
   ],
+  "bin": {
+    "vite-plugin-design-mode": "dist/cli/index.js"
+  },
   "keywords": [
     "vite",
     "plugin",
@@ -29,14 +32,22 @@
   "peerDependencies": {
     "@babel/core": "^7.0.0",
     "@babel/types": "^7.0.0",
-    "vite": ">=4.0.0"
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "vite": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": false
+    },
+    "react-dom": {
+      "optional": false
+    }
   },
   "dependencies": {
     "@babel/standalone": "^7.23.0",
     "@babel/traverse": "^7.24.0",
     "clsx": "^2.1.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
@@ -47,16 +58,18 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "typescript": "^5.0.0",
-    "vite": "^5.0.0",
+    "vite": "^5.4.21",
     "vitest": "^1.0.0"
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc && node scripts/copy-client.mjs",
+    "build": "vite build && tsc && tsc -p tsconfig.cli.json && node scripts/copy-client.mjs",
+    "build:cli": "tsc -p tsconfig.cli.json",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
+    "test:cli": "bash scripts/test-cli.sh",
     "lint": "eslint src --ext .ts,.tsx"
   }
 }

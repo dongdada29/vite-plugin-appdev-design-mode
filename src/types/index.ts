@@ -7,6 +7,8 @@ export interface DesignModeOptions {
   verbose?: boolean;
   exclude?: string[];
   include?: string[];
+  enableBackup?: boolean; // 是否启用备份功能，默认为 false
+  enableHistory?: boolean; // 是否启用历史记录功能，默认为 false
 }
 
 export interface SourceMappingInfo {

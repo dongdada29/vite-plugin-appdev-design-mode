@@ -7,58 +7,68 @@ export function createServerMiddleware(
   options: Required<DesignModeOptions>,
   rootDir: string
 ) {
+  // 获取备份配置，默认为 false
+  const enableBackup = options.enableBackup === true;
+  // 获取历史记录配置，默认为 false
+  const enableHistory = options.enableHistory === true;
+
   return async (req: any, res: any) => {
     const url = new URL(req.url, 'http://localhost');
 
     try {
       switch (url.pathname) {
         // 现有端点
-        case '/__appdev_design_mode/get-source':
+        case '/get-source':
           await handleGetSource(url, res, rootDir);
           break;
-        case '/__appdev_design_mode/modify-source':
+        case '/modify-source':
           await handleModifySource(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/health':
+        case '/health':
           await handleHealthCheck(res);
           break;
 
         // 新增端点
-        case '/__appdev_design_mode/update':
-          await handleUpdate(req, res, rootDir);
+        case '/update':
+          await handleUpdate(req, res, rootDir, enableBackup);
           break;
-        case '/__appdev_design_mode/batch-update':
-          await handleBatchUpdate(req, res, rootDir);
+        case '/batch-update':
+          await handleBatchUpdate(req, res, rootDir, enableBackup, enableHistory);
           break;
-        case '/__appdev_design_mode/get-element-state':
-          await handleGetElementState(req, res, rootDir);
+        case '/batch-update-status':
+          await handleBatchUpdateStatus(req, res, rootDir, enableHistory);
           break;
-        case '/__appdev_design_mode/batch-update-status':
-          await handleBatchUpdateStatus(req, res, rootDir);
+        case '/undo':
+          await handleUndo(req, res, rootDir, enableBackup);
           break;
-        case '/__appdev_design_mode/undo':
-          await handleUndo(req, res, rootDir);
-          break;
-        case '/__appdev_design_mode/redo':
+        case '/redo':
           await handleRedo(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/get-history':
-          await handleGetHistory(req, res, rootDir);
+        case '/get-history':
+          await handleGetHistory(req, res, rootDir, enableHistory);
           break;
-        case '/__appdev_design_mode/validate-update':
+        case '/validate-update':
           await handleValidateUpdate(req, res, rootDir);
           break;
 
         default:
           res.statusCode = 404;
-          res.end(JSON.stringify({ error: 'Not found', availableEndpoints: [
-            '/__appdev_design_mode/get-source',
-            '/__appdev_design_mode/modify-source',
-            '/__appdev_design_mode/update',
-            '/__appdev_design_mode/batch-update',
-            '/__appdev_design_mode/get-element-state',
-            '/__appdev_design_mode/health'
-          ]}));
+          res.end(JSON.stringify({
+            error: 'Not found',
+            requestedPath: url.pathname,
+            availableEndpoints: [
+              '/get-source',
+              '/modify-source',
+              '/update',
+              '/batch-update',
+              '/batch-update-status',
+              '/undo',
+              '/redo',
+              '/get-history',
+              '/validate-update',
+              '/health'
+            ]
+          }));
       }
     } catch (error) {
       console.error('[DesignMode] Server middleware error:', error);
@@ -239,7 +249,7 @@ async function handleHealthCheck(res: any) {
  * 统一更新接口
  * 支持样式、内容、属性更新
  */
-async function handleUpdate(req: any, res: any, rootDir: string) {
+async function handleUpdate(req: any, res: any, rootDir: string, enableBackup: boolean = false) {
   if (req.method !== 'POST') {
     res.statusCode = 405;
     res.end(JSON.stringify({ error: 'Method not allowed' }));
@@ -304,9 +314,12 @@ async function handleUpdate(req: any, res: any, rootDir: string) {
         rootDir
       );
 
-      // 创建备份
-      const backupPath = `${fullFilePath}.backup.${Date.now()}`;
-      await fs.promises.writeFile(backupPath, fileContent, 'utf-8');
+      // 根据配置决定是否创建备份
+      let backupPath: string | undefined;
+      if (enableBackup) {
+        backupPath = `${fullFilePath}.backup.${Date.now()}`;
+        await fs.promises.writeFile(backupPath, fileContent, 'utf-8');
+      }
 
       // 写回文件
       await fs.promises.writeFile(fullFilePath, updatedContent, 'utf-8');
@@ -321,7 +334,7 @@ async function handleUpdate(req: any, res: any, rootDir: string) {
         newValue,
         originalValue,
         timestamp: Date.now(),
-        backupPath
+        backupPath: backupPath || null
       };
 
       res.statusCode = 200;
@@ -351,7 +364,7 @@ async function handleUpdate(req: any, res: any, rootDir: string) {
 /**
  * 批量更新接口
  */
-async function handleBatchUpdate(req: any, res: any, rootDir: string) {
+async function handleBatchUpdate(req: any, res: any, rootDir: string, enableBackup: boolean = false, enableHistory: boolean = false) {
   if (req.method !== 'POST') {
     res.statusCode = 405;
     res.end(JSON.stringify({ error: 'Method not allowed' }));
@@ -413,7 +426,7 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string) {
         }
 
         try {
-          const result = await processSingleUpdate(update, rootDir, batchId);
+          const result = await processSingleUpdate(update, rootDir, batchId, enableBackup);
           results.push(result);
           if (result.success) {
             batchSession.successfulUpdates++;
@@ -432,18 +445,20 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string) {
         }
       }
 
-      // 保存批量更新会话到文件
-      const sessionFile = path.join(rootDir, '.appdev_batch_sessions.json');
-      let sessions = {};
-      try {
-        const existingSessionsContent = await fs.promises.readFile(sessionFile, 'utf-8');
-        sessions = JSON.parse(existingSessionsContent);
-      } catch {
-        // 文件不存在或无法读取，创建新的
-      }
+      // 根据配置决定是否保存批量更新会话到文件
+      if (enableHistory) {
+        const sessionFile = path.join(rootDir, '.appdev_batch_sessions.json');
+        let sessions = {};
+        try {
+          const existingSessionsContent = await fs.promises.readFile(sessionFile, 'utf-8');
+          sessions = JSON.parse(existingSessionsContent);
+        } catch {
+          // 文件不存在或无法读取，创建新的
+        }
 
-      (sessions as any)[batchId] = batchSession;
-      await fs.promises.writeFile(sessionFile, JSON.stringify(sessions, null, 2), 'utf-8');
+        (sessions as any)[batchId] = batchSession;
+        await fs.promises.writeFile(sessionFile, JSON.stringify(sessions, null, 2), 'utf-8');
+      }
 
       res.statusCode = 200;
       res.end(
@@ -470,84 +485,24 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string) {
 }
 
 /**
- * 获取元素状态
- */
-async function handleGetElementState(req: any, res: any, rootDir: string) {
-  if (req.method !== 'POST') {
-    res.statusCode = 405;
-    res.end(JSON.stringify({ error: 'Method not allowed' }));
-    return;
-  }
-
-  let body = '';
-  req.on('data', (chunk: any) => {
-    body += chunk.toString();
-  });
-
-  req.on('end', async () => {
-    try {
-      const { sourceInfo } = JSON.parse(body);
-
-      if (!sourceInfo || !sourceInfo.fileName) {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ error: 'Missing sourceInfo' }));
-        return;
-      }
-
-      const filePath = path.resolve(rootDir, sourceInfo.fileName);
-
-      // 检查文件是否存在
-      try {
-        await fs.promises.access(filePath, fs.constants.F_OK);
-      } catch {
-        res.statusCode = 404;
-        res.end(JSON.stringify({ error: 'Source file not found', filePath }));
-        return;
-      }
-
-      const fileContent = await fs.promises.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
-      const targetLine = Math.max(0, (sourceInfo.lineNumber || 1) - 1);
-
-      const elementState = {
-        sourceInfo,
-        currentContent: lines[targetLine] || '',
-        fileExists: true,
-        fileSize: fileContent.length,
-        lastModified: (await fs.promises.stat(filePath)).mtime.getTime(),
-        hasModifications: await checkForModifications(filePath),
-        context: {
-          before: lines[Math.max(0, targetLine - 2)] || '',
-          current: lines[targetLine] || '',
-          after: lines[Math.min(lines.length - 1, targetLine + 2)] || ''
-        }
-      };
-
-      res.statusCode = 200;
-      res.end(JSON.stringify({
-        success: true,
-        elementState
-      }));
-    } catch (error) {
-      res.statusCode = 500;
-      res.end(
-        JSON.stringify({
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-      );
-    }
-  });
-}
-
-/**
  * 批量更新状态查询
  */
-async function handleBatchUpdateStatus(req: any, res: any, rootDir: string) {
+async function handleBatchUpdateStatus(req: any, res: any, rootDir: string, enableHistory: boolean = false) {
   const batchId = req.url.split('?')[1]?.split('=')[1];
 
   if (!batchId) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: 'Missing batchId' }));
+    return;
+  }
+
+  // 如果历史记录功能被禁用，返回错误
+  if (!enableHistory) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ 
+      error: 'History is disabled. Cannot query batch status without history enabled.',
+      enableHistory: false
+    }));
     return;
   }
 
@@ -590,7 +545,7 @@ async function handleBatchUpdateStatus(req: any, res: any, rootDir: string) {
 /**
  * 撤销操作
  */
-async function handleUndo(req: any, res: any, rootDir: string) {
+async function handleUndo(req: any, res: any, rootDir: string, enableBackup: boolean = false) {
   if (req.method !== 'POST') {
     res.statusCode = 405;
     res.end(JSON.stringify({ error: 'Method not allowed' }));
@@ -609,6 +564,16 @@ async function handleUndo(req: any, res: any, rootDir: string) {
       if (!batchId) {
         res.statusCode = 400;
         res.end(JSON.stringify({ error: 'Missing batchId' }));
+        return;
+      }
+
+      // 如果备份功能被禁用，返回错误
+      if (!enableBackup) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ 
+          error: 'Backup is disabled. Cannot undo without backup files.',
+          enableBackup: false
+        }));
         return;
       }
 
@@ -668,7 +633,17 @@ async function handleRedo(req: any, res: any, rootDir: string) {
 /**
  * 获取更新历史
  */
-async function handleGetHistory(req: any, res: any, rootDir: string) {
+async function handleGetHistory(req: any, res: any, rootDir: string, enableHistory: boolean = false) {
+  // 如果历史记录功能被禁用，返回错误
+  if (!enableHistory) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ 
+      error: 'History is disabled. Cannot get history without history enabled.',
+      enableHistory: false
+    }));
+    return;
+  }
+
   try {
     const sessionFile = path.join(rootDir, '.appdev_batch_sessions.json');
     let sessions = {};
@@ -801,7 +776,8 @@ async function smartReplaceInSource(
     lines[targetLine] = newLine;
     return lines.join('\n');
   } catch (error) {
-    throw new Error(`Smart replacement failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('[DesignMode] Smart replace failed:', error);
+    return line; // Fallback to original line
   }
 }
 
@@ -892,7 +868,7 @@ async function validateUpdateRequest(update: any, rootDir: string): Promise<{ va
 }
 
 // 处理单个更新
-async function processSingleUpdate(update: any, rootDir: string, batchId: string): Promise<any> {
+async function processSingleUpdate(update: any, rootDir: string, batchId: string, enableBackup: boolean = false): Promise<any> {
   try {
     const validation = await validateUpdateRequest(update, rootDir);
     if (!validation.valid) {
@@ -906,21 +882,23 @@ async function processSingleUpdate(update: any, rootDir: string, batchId: string
     const fullFilePath = path.resolve(rootDir, update.filePath);
     const fileContent = await fs.promises.readFile(fullFilePath, 'utf-8');
 
-    const updatedContent = await smartReplaceInSource(
-      fileContent,
-      {
-        lineNumber: update.line,
-        columnNumber: update.column,
-        newValue: update.newValue,
-        originalValue: update.originalValue,
-        type: update.type
-      },
-      rootDir
-    );
+      const updatedContent = await smartReplaceInSource(
+        fileContent,
+        {
+          lineNumber: update.line,
+          columnNumber: update.column,
+          newValue: update.newValue,
+          originalValue: update.originalValue,
+          type: update.type
+        },
+        rootDir
+      );
 
-    // 创建备份
-    const backupPath = `${fullFilePath}.backup.${Date.now()}`;
-    await fs.promises.writeFile(fullFilePath, fileContent, 'utf-8');
+    // 根据配置决定是否创建备份
+    if (enableBackup) {
+      const backupPath = `${fullFilePath}.backup.${Date.now()}`;
+      await fs.promises.writeFile(backupPath, fileContent, 'utf-8');
+    }
 
     // 写回文件
     await fs.promises.writeFile(fullFilePath, updatedContent, 'utf-8');

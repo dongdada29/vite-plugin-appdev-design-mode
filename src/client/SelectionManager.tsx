@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback, useRef } from 'react';
 import { useDesignMode } from './DesignModeContext';
 import { ElementInfo, SourceInfo } from '../types/messages';
+import { AttributeNames, isSourceMappingAttribute } from './utils/attributeNames';
 
 /**
  * 元素选择管理器
@@ -23,23 +24,23 @@ export class SelectionManager {
       excludeSelectors: string[];
       includeOnlyElements: boolean;
     } = {
-      enableSelection: true,
-      enableHover: true,
-      selectionDelay: 0,
-      excludeSelectors: [
-        'script',
-        'style',
-        'meta',
-        'link',
-        'head',
-        'title',
-        'html',
-        'body',
-        '[data-selection-exclude="true"]',
-        '.no-selection'
-      ],
-      includeOnlyElements: false
-    }
+        enableSelection: true,
+        enableHover: true,
+        selectionDelay: 0,
+        excludeSelectors: [
+          'script',
+          'style',
+          'meta',
+          'link',
+          'head',
+          'title',
+          'html',
+          'body',
+          '[data-selection-exclude="true"]',
+          '.no-selection'
+        ],
+        includeOnlyElements: false
+      }
   ) {
     this.initializeEventListeners();
   }
@@ -54,7 +55,7 @@ export class SelectionManager {
     this.container.addEventListener('click', this.handleClick.bind(this), true);
     this.container.addEventListener('mousedown', this.handleMouseDown.bind(this), true);
     this.container.addEventListener('mouseup', this.handleMouseUp.bind(this), true);
-    
+
     if (this.config.enableHover) {
       this.container.addEventListener('mouseenter', this.handleMouseEnter.bind(this), true);
       this.container.addEventListener('mouseleave', this.handleMouseLeave.bind(this), true);
@@ -179,6 +180,9 @@ export class SelectionManager {
    */
   private isValidElement(element: HTMLElement): boolean {
     if (!element || !element.tagName) return false;
+
+    // Exclude context menu
+    if (element.closest('[data-context-menu="true"]')) return false;
 
     // 检查是否在排除列表中
     for (const selector of this.config.excludeSelectors) {
@@ -339,12 +343,17 @@ export class SelectionManager {
     const rect = element.getBoundingClientRect();
     const computedStyle = window.getComputedStyle(element);
 
+    // 判断是否为静态文本：检查元素是否有 static-content 属性
+    const isStaticText = element.hasAttribute(AttributeNames.staticContent);
+
     // Note: elementId is not part of ElementInfo anymore
     return {
       tagName: element.tagName.toLowerCase(),
       className: element.className || '',
-      textContent: this.getElementTextContent(element),
+      // Only return text content if element is marked as static content
+      textContent: isStaticText ? this.getElementTextContent(element) : '',
       sourceInfo,
+      isStaticText: isStaticText || false, // 默认为 false
     };
   }
 
@@ -352,8 +361,8 @@ export class SelectionManager {
    * 提取元素的源码信息
    */
   private extractSourceInfo(element: HTMLElement): SourceInfo | null {
-    // 优先尝试从 data-source-info JSON 属性获取
-    const sourceInfoStr = element.getAttribute('data-source-info');
+    // 优先尝试从 info JSON 属性获取
+    const sourceInfoStr = element.getAttribute(AttributeNames.info);
     if (sourceInfoStr) {
       try {
         const sourceInfo = JSON.parse(sourceInfoStr);
@@ -368,9 +377,9 @@ export class SelectionManager {
     }
 
     // 备用方案：从个别属性获取
-    const fileName = element.getAttribute('data-source-file');
-    const lineStr = element.getAttribute('data-source-line');
-    const columnStr = element.getAttribute('data-source-column');
+    const fileName = element.getAttribute(AttributeNames.file);
+    const lineStr = element.getAttribute(AttributeNames.line);
+    const columnStr = element.getAttribute(AttributeNames.column);
 
     if (fileName && lineStr && columnStr) {
       return {
@@ -406,8 +415,9 @@ export class SelectionManager {
     const elementAttributes = Array.from(element.attributes);
 
     elementAttributes.forEach(attr => {
-      if (!attr.name.startsWith('data-source-') && 
-          !attr.name.startsWith('data-selection-')) {
+      // 过滤掉源码映射属性和选择相关的属性
+      if (!isSourceMappingAttribute(attr.name) &&
+        !attr.name.startsWith('data-selection-')) {
         attributes[attr.name] = attr.value;
       }
     });
@@ -424,29 +434,29 @@ export class SelectionManager {
 
     while (current && current !== this.container) {
       let selector = current.tagName.toLowerCase();
-      
+
       if (current.id) {
         selector += `#${current.id}`;
         path.unshift(selector);
         break;
       }
-      
+
       if (current.className) {
         const classes = Array.from(current.classList).slice(0, 3); // 只取前3个类名
         selector += `.${classes.join('.')}`;
       }
-      
+
       // 计算兄弟元素索引
       const siblings = Array.from(current.parentNode?.children || []);
-      const sameTagSiblings = siblings.filter(sibling => 
+      const sameTagSiblings = siblings.filter(sibling =>
         sibling.tagName === current!.tagName
       );
-      
+
       if (sameTagSiblings.length > 1) {
         const index = sameTagSiblings.indexOf(current);
         selector += `:nth-of-type(${index + 1})`;
       }
-      
+
       path.unshift(selector);
       current = current.parentElement;
     }

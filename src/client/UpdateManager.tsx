@@ -1,72 +1,19 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useDesignMode } from './DesignModeContext';
-import { SourceInfo, ElementInfo } from '../types/messages';
+import { SourceInfo, AddToChatMessage, CopyElementMessage } from '../types/messages';
+import { extractSourceInfo, hasSourceMapping } from './utils/sourceInfo';
+import { isPureStaticText } from './utils/elementUtils';
+import { showContextMenu, MenuItem } from './ui/ContextMenu';
+import { UpdateOperation, UpdateState, UpdateResult, BatchUpdateItem, UpdateManagerConfig } from './types/UpdateTypes';
+import { HistoryManager } from './managers/HistoryManager';
+import { ObserverManager } from './managers/ObserverManager';
+import { EditManager } from './managers/EditManager';
+import { UpdateService } from './services/UpdateService';
+import { bridge } from './bridge';
 
-/**
- * 更新操作类型
- */
-export type UpdateOperation =
-  | 'style_update'
-  | 'content_update'
-  | 'attribute_update'
-  | 'class_update'
-  | 'batch_update';
 
-/**
- * 更新状态
- */
-export interface UpdateState {
-  id: string;
-  operation: UpdateOperation;
-  sourceInfo: SourceInfo;
-  element: HTMLElement;
-  oldValue: string;
-  newValue: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'reverted';
-  timestamp: number;
-  error?: string;
-  retryCount: number;
-}
 
-/**
- * 更新结果
- */
-export interface UpdateResult {
-  success: boolean;
-  element: HTMLElement;
-  updateId: string;
-  error?: string;
-  serverResponse?: any;
-}
 
-/**
- * 批量更新项
- */
-export interface BatchUpdateItem {
-  element: HTMLElement;
-  type: 'style' | 'content' | 'attribute';
-  sourceInfo: SourceInfo;
-  newValue: string;
-  originalValue?: string;
-  selector?: string;
-}
-
-/**
- * 更新管理器配置
- */
-export interface UpdateManagerConfig {
-  enableDirectEdit: boolean;
-  enableBatching: boolean;
-  batchDebounceMs: number;
-  maxRetries: number;
-  autoSave: boolean;
-  saveDelay: number;
-  validation: {
-    validateSource: boolean;
-    validateValue: boolean;
-    maxLength: number;
-  };
-}
 
 /**
  * 更新管理器
@@ -74,13 +21,19 @@ export interface UpdateManagerConfig {
  */
 export class UpdateManager {
   private updateQueue: UpdateState[] = [];
-  private processingUpdates = new Set<string>();
-  private updateHistory: UpdateState[] = [];
+  private historyManager: HistoryManager;
+  private observerManager: ObserverManager;
+  private editManager: EditManager;
+  private updateService: UpdateService;
   private callbacks: Map<UpdateOperation, Set<(update: UpdateState) => void>> =
     new Map();
   private batchTimer: NodeJS.Timeout | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
-  private observer: MutationObserver | null = null;
+
+  // Design mode state
+  private isDesignMode: boolean = false;
+  private selectedElement: HTMLElement | null = null;
+  private selectElementCallback: ((element: HTMLElement | null) => void) | null = null;
 
   constructor(
     private config: UpdateManagerConfig = {
@@ -97,56 +50,40 @@ export class UpdateManager {
       },
     }
   ) {
-    this.initializeObserver();
+    this.historyManager = new HistoryManager();
+    this.observerManager = new ObserverManager(
+      (target, type) => this.editManager.handleDirectEdit(target, type),
+      (node) => this.setupElementEditHandlers(node)
+    );
+    this.editManager = new EditManager(
+      (update) => this.updateService.processUpdate(update),
+      this.config
+    );
+    this.updateService = new UpdateService(
+      this.config,
+      (update) => {
+        this.historyManager.add(update);
+        this.notifyCallbacks(update.operation, update);
+        if (this.config.autoSave) {
+          this.triggerAutoSave();
+        }
+      },
+      (update) => {
+        // onFail callback - could log or notify
+      }
+    );
+
+    if (this.config.enableDirectEdit) {
+      this.observerManager.enable();
+    }
+
     this.initializeEventListeners();
   }
 
   /**
    * 初始化DOM变化观察器
    */
-  private initializeObserver() {
-    if (!this.config.enableDirectEdit) return;
 
-    this.observer = new MutationObserver(mutations => {
-      // 处理直接编辑的DOM变化
-      mutations.forEach(mutation => {
-        if (mutation.type === 'childList') {
-          // 处理元素添加/删除
-          mutation.addedNodes.forEach(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              this.setupElementEditHandlers(node as HTMLElement);
-            }
-          });
-        } else if (mutation.type === 'characterData') {
-          // 处理文本内容变化
-          const target = mutation.target.parentElement as HTMLElement;
-          if (target && this.hasSourceMapping(target)) {
-            this.handleDirectEdit(target, 'content');
-          }
-        } else if (mutation.type === 'attributes') {
-          // 处理属性变化（样式、class等）
-          const target = mutation.target as HTMLElement;
-          if (target && this.hasSourceMapping(target)) {
-            if (mutation.attributeName === 'class') {
-              this.handleDirectEdit(target, 'style');
-            } else if (mutation.attributeName?.startsWith('style')) {
-              this.handleDirectEdit(target, 'style');
-            }
-          }
-        }
-      });
-    });
-
-    // 开始观察DOM变化
-    this.observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeOldValue: true,
-      attributeFilter: ['class', 'style'],
-    });
-  }
 
   /**
    * 初始化事件监听器
@@ -161,22 +98,30 @@ export class UpdateManager {
     document.addEventListener('contextmenu', this.handleContextMenu.bind(this));
 
     // 键盘快捷键
-    document.addEventListener('keydown', this.handleKeyDown.bind(this));
+    // document.addEventListener('keydown', this.handleKeyDown.bind(this));
   }
+
+
 
   /**
    * 处理双击事件
    */
   private handleDblClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
-    if (!this.hasSourceMapping(target)) return;
+    if (!hasSourceMapping(target)) return;
 
     // 防止默认行为
     event.preventDefault();
     event.stopPropagation();
 
+    // Check if it's pure static text - REMOVED to let EditManager handle validation
+    // if (!isPureStaticText(target)) {
+    //   console.log('[UpdateManager] Ignored dblclick on non-static text element');
+    //   return;
+    // }
+
     // 进入编辑模式
-    this.enterEditMode(target, 'content');
+    this.editManager.handleDirectEdit(target, 'content');
   }
 
   /**
@@ -184,13 +129,49 @@ export class UpdateManager {
    */
   private handleContextMenu(event: MouseEvent) {
     const target = event.target as HTMLElement;
-    if (!this.hasSourceMapping(target)) return;
+
+    // Only show context menu if design mode is enabled
+    if (!this.isDesignMode) return;
+
+    // Exclude context menu
+    if (target.closest('[data-context-menu="true"]')) return;
+
+    // 检查元素是否有源码映射（可被选中）
+    if (!hasSourceMapping(target)) return;
+
+    // 检查是否是已选中元素
+    const isSelected = !!(this.selectedElement && target === this.selectedElement);
+
+    // 如果元素有 hover 状态，在显示菜单前保持它（防止 mouseout 事件移除）
+    const hadHoverState = target.hasAttribute('data-design-hover');
+    if (hadHoverState) {
+      // 添加标记，表示这是右键菜单保持的 hover 状态
+      target.setAttribute('data-context-menu-hover', 'true');
+      // 确保 hover 状态保持
+      target.setAttribute('data-design-hover', 'true');
+    }
 
     event.preventDefault();
 
-    // 显示自定义上下文菜单或触发编辑
-    this.showContextMenu(target, event.clientX, event.clientY);
+    // 显示自定义上下文菜单（已选中元素或可被选中的元素都可以显示）
+    this.showContextMenu(target, event.clientX, event.clientY, isSelected);
   }
+
+  /**
+   * Update design mode state
+   */
+  public setDesignModeState(
+    isDesignMode: boolean,
+    selectedElement: HTMLElement | null = null,
+    selectElementCallback?: (element: HTMLElement | null) => void
+  ) {
+    this.isDesignMode = isDesignMode;
+    this.selectedElement = selectedElement;
+    if (selectElementCallback) {
+      this.selectElementCallback = selectElementCallback;
+    }
+  }
+
 
   /**
    * 处理键盘按键
@@ -199,9 +180,14 @@ export class UpdateManager {
     // F2键进入编辑模式
     if (event.key === 'F2') {
       const selectedElement = document.activeElement as HTMLElement;
-      if (selectedElement && this.hasSourceMapping(selectedElement)) {
+      if (selectedElement && hasSourceMapping(selectedElement)) {
         event.preventDefault();
-        this.enterEditMode(selectedElement, 'content');
+        this.editManager.handleDirectEdit(selectedElement, 'content');
+        // if (isPureStaticText(selectedElement)) {
+        //   this.editManager.handleDirectEdit(selectedElement, 'content');
+        // } else {
+        //   console.log('[UpdateManager] Cannot edit non-static text element');
+        // }
       }
     }
 
@@ -235,7 +221,7 @@ export class UpdateManager {
    * 设置元素的编辑处理器
    */
   private setupElementEditHandlers(element: HTMLElement) {
-    if (!this.hasSourceMapping(element)) return;
+    if (!hasSourceMapping(element)) return;
 
     // 为元素添加可编辑指示器
     element.setAttribute('data-edit-enabled', 'true');
@@ -254,15 +240,7 @@ export class UpdateManager {
     });
   }
 
-  /**
-   * 检查元素是否有源码映射
-   */
-  private hasSourceMapping(element: HTMLElement): boolean {
-    return !!(
-      element.getAttribute('data-source-file') ||
-      element.getAttribute('data-source-info')
-    );
-  }
+
 
   /**
    * 处理直接编辑
@@ -273,7 +251,7 @@ export class UpdateManager {
   ) {
     if (!this.config.enableDirectEdit) return;
 
-    const sourceInfo = this.extractSourceInfo(element);
+    const sourceInfo = extractSourceInfo(element);
     if (!sourceInfo) return;
 
     switch (type) {
@@ -293,7 +271,7 @@ export class UpdateManager {
     element: HTMLElement,
     type: 'style' | 'content' | 'attribute'
   ) {
-    const sourceInfo = this.extractSourceInfo(element);
+    const sourceInfo = extractSourceInfo(element);
     if (!sourceInfo) {
       console.warn('[UpdateManager] Element has no source mapping');
       return;
@@ -301,189 +279,191 @@ export class UpdateManager {
 
     switch (type) {
       case 'content':
-        this.editTextContent(element);
+        this.editManager.handleDirectEdit(element, 'content');
         break;
       case 'style':
-        this.editStyle(element);
+        this.editManager.editStyle(element);
         break;
       case 'attribute':
-        this.editAttributes(element);
+        this.editManager.editAttributes(element);
         break;
     }
   }
 
-  /**
-   * 编辑文本内容
-   */
-  private editTextContent(element: HTMLElement) {
-    const originalText = element.innerText;
-    const textArea = document.createElement('textarea');
 
-    // 设置textarea样式
-    textArea.value = originalText;
-    textArea.style.position = 'absolute';
-    textArea.style.zIndex = '9999';
-    textArea.style.width = element.offsetWidth + 'px';
-    textArea.style.height = element.offsetHeight + 'px';
-    textArea.style.fontSize = window.getComputedStyle(element).fontSize;
-    textArea.style.fontFamily = window.getComputedStyle(element).fontFamily;
-    textArea.style.color = window.getComputedStyle(element).color;
-    textArea.style.background = 'rgba(255, 255, 255, 0.9)';
-    textArea.style.border = '2px solid #007acc';
-    textArea.style.padding = '4px';
-    textArea.style.margin = '0';
-    textArea.style.resize = 'none';
-    textArea.style.outline = 'none';
-
-    // 获取元素的边界矩形
-    const rect = element.getBoundingClientRect();
-    textArea.style.left = rect.left + 'px';
-    textArea.style.top = rect.top + 'px';
-
-    // 添加到页面
-    document.body.appendChild(textArea);
-    textArea.focus();
-
-    // 处理保存和取消
-    const handleSave = () => {
-      const newText = textArea.value;
-      if (newText !== originalText) {
-        element.innerText = newText;
-        this.updateContent(element, newText, this.extractSourceInfo(element)!);
-      }
-      this.exitEditMode(textArea);
-    };
-
-    const handleCancel = () => {
-      this.exitEditMode(textArea);
-    };
-
-    // 事件监听
-    textArea.addEventListener('blur', handleSave);
-    textArea.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        handleSave();
-      } else if (e.key === 'Escape') {
-        handleCancel();
-      }
-    });
-  }
-
-  /**
-   * 编辑样式
-   */
-  private editStyle(element: HTMLElement) {
-    // 打开样式编辑器（这里可以集成外部样式面板）
-    console.log('[UpdateManager] Opening style editor for:', element);
-
-    // 触发样式编辑事件
-    this.notifyCallbacks('class_update', {
-      id: this.generateUpdateId(),
-      operation: 'class_update' as UpdateOperation,
-      sourceInfo: this.extractSourceInfo(element)!,
-      element,
-      oldValue: element.className,
-      newValue: element.className,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    });
-  }
-
-  /**
-   * 编辑属性
-   */
-  private editAttributes(element: HTMLElement) {
-    // 打开属性编辑器
-    console.log('[UpdateManager] Opening attribute editor for:', element);
-  }
 
   /**
    * 退出编辑模式
    */
-  private exitEditMode(editor: HTMLElement) {
-    if (editor.parentNode) {
-      editor.parentNode.removeChild(editor);
-    }
-  }
+
 
   /**
    * 显示上下文菜单
    */
-  private showContextMenu(element: HTMLElement, x: number, y: number) {
-    // 创建上下文菜单
-    const menu = document.createElement('div');
-    menu.style.position = 'fixed';
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
-    menu.style.background = 'white';
-    menu.style.border = '1px solid #ccc';
-    menu.style.borderRadius = '4px';
-    menu.style.padding = '4px 0';
-    menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-    menu.style.zIndex = '10000';
+  private showContextMenu(element: HTMLElement, x: number, y: number, isSelected: boolean) {
+    const menuItems: MenuItem[] = [];
 
-    // 菜单项
-    const menuItems = [
+    // 添加其他菜单项（移除了选中/取消选中逻辑）
+    menuItems.push(
       {
-        label: '编辑文本',
-        action: () => this.enterEditMode(element, 'content'),
+        label: '添加到传话',
+        action: () => this.addToChat(element),
       },
-      { label: '编辑样式', action: () => this.enterEditMode(element, 'style') },
       {
-        label: '编辑属性',
-        action: () => this.enterEditMode(element, 'attribute'),
-      },
-      { label: '复制元素', action: () => this.copyElement(element) },
-      { label: '删除元素', action: () => this.deleteElement(element) },
-    ];
-
-    menuItems.forEach(item => {
-      const menuItem = document.createElement('div');
-      menuItem.textContent = item.label;
-      menuItem.style.padding = '8px 16px';
-      menuItem.style.cursor = 'pointer';
-      menuItem.style.background = 'transparent';
-
-      menuItem.addEventListener('mouseenter', () => {
-        menuItem.style.background = '#f0f0f0';
-      });
-
-      menuItem.addEventListener('mouseleave', () => {
-        menuItem.style.background = 'transparent';
-      });
-
-      menuItem.addEventListener('click', () => {
-        item.action();
-        document.body.removeChild(menu);
-      });
-
-      menu.appendChild(menuItem);
-    });
-
-    // 添加到页面
-    document.body.appendChild(menu);
-
-    // 点击其他地方关闭菜单
-    const closeMenu = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
-        document.body.removeChild(menu);
-        document.removeEventListener('click', closeMenu);
+        label: '复制元素',
+        action: () => this.copyElement(element)
       }
-    };
+    );
 
-    setTimeout(() => {
-      document.addEventListener('click', closeMenu);
-    }, 100);
+    showContextMenu(element, x, y, menuItems);
   }
+
+  /**
+   * 设置右键菜单的关闭处理器（支持 clickoutside 和 ESC 键）
+   */
+
 
   /**
    * 复制元素
    */
   private copyElement(element: HTMLElement) {
-    const clone = element.cloneNode(true) as HTMLElement;
-    document.body.appendChild(clone);
-    console.log('[UpdateManager] Element copied:', clone);
+    const sourceInfo = extractSourceInfo(element);
+    const content = element.innerText || element.textContent || '';
+
+    // Copy element to clipboard (if possible)
+    const elementInfo = {
+      tagName: element.tagName.toLowerCase(),
+      className: element.className,
+      content: content,
+      sourceInfo: sourceInfo ?? undefined // 将 null 转换为 undefined
+    };
+
+    const textToCopy = JSON.stringify(elementInfo, null, 2);
+
+    // 发送拷贝消息的辅助函数
+    const sendCopyMessage = (success: boolean, error?: string) => {
+      const message: CopyElementMessage = {
+        type: 'COPY_ELEMENT',
+        payload: {
+          elementInfo: {
+            tagName: elementInfo.tagName,
+            className: elementInfo.className,
+            content: elementInfo.content,
+            sourceInfo: elementInfo.sourceInfo
+          },
+          textContent: textToCopy, // 用于剪贴板的 JSON 字符串
+          success, // 是否拷贝成功
+          error // 如果失败，错误信息
+        },
+        timestamp: Date.now()
+      };
+
+      // 如果在 iframe 环境中，通过 bridge 发送消息到父窗口
+      // 否则直接使用 window.postMessage（主窗口环境）
+      if (typeof window !== 'undefined' && window.self !== window.top) {
+        // iframe 环境：通过 bridge 发送到父窗口
+        bridge.send(message).catch(error => {
+          console.error('[UpdateManager] Failed to send COPY_ELEMENT via bridge:', error);
+          // 如果 bridge 发送失败，回退到直接使用 postMessage
+          window.parent.postMessage(message, '*');
+        });
+      } else {
+        // 主窗口环境：直接使用 postMessage
+        window.postMessage(message, '*');
+      }
+    };
+
+    // Try to copy to clipboard (本地也尝试复制)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        let alertMessage = '已复制元素信息到剪贴板:\n\n';
+        if (sourceInfo) {
+          alertMessage += `文件: ${sourceInfo.fileName}\n`;
+          alertMessage += `位置: L${sourceInfo.lineNumber}\n`;
+          alertMessage += `\n`;
+        }
+        alertMessage += `标签: <${elementInfo.tagName}>\n`;
+        alertMessage += `类名: ${elementInfo.className}\n`;
+        alertMessage += `内容: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`;
+
+        console.log('[UpdateManager] Copy element:', alertMessage);
+        
+        // 拷贝成功，发送成功消息
+        sendCopyMessage(true);
+      }).catch(err => {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error('[UpdateManager] Failed to copy to clipboard:', err);
+        
+        // 拷贝失败，发送失败消息
+        sendCopyMessage(false, errorMessage);
+      });
+    } else {
+      console.log('[UpdateManager] Element info:', elementInfo);
+      
+      // 浏览器不支持剪贴板 API，发送失败消息
+      sendCopyMessage(false, '浏览器不支持剪贴板 API');
+    }
+  }
+
+  /**
+   * Add element content to chat
+   */
+  private addToChat(element: HTMLElement) {
+    const sourceInfo = extractSourceInfo(element);
+    const content = element.innerText || element.textContent || '';
+
+    // console.log('[UpdateManager] Adding to chat:', { content, sourceInfo });
+
+    // 构建 ADD_TO_CHAT 消息
+    // 将 null 转换为 undefined，因为 AddToChatMessage 期望 undefined 而不是 null
+    const contextSourceInfo = sourceInfo ?? undefined;
+    
+    // 如果 sourceInfo 存在，构建完整的 elementInfo（包含必需的 sourceInfo 和 isStaticText）
+    // 如果 sourceInfo 不存在，则不提供 elementInfo
+    const elementInfo = sourceInfo ? {
+      tagName: element.tagName.toLowerCase(),
+      className: element.className,
+      textContent: content,
+      sourceInfo, // ElementInfo 要求 sourceInfo 是必需的
+      isStaticText: isPureStaticText(element)
+    } : undefined;
+
+    const message: AddToChatMessage = {
+      type: 'ADD_TO_CHAT',
+      payload: {
+        content,
+        context: {
+          sourceInfo: contextSourceInfo,
+          elementInfo
+        }
+      },
+      timestamp: Date.now()
+    };
+
+    // 如果在 iframe 环境中，通过 bridge 发送消息到父窗口
+    // 否则直接使用 window.postMessage（主窗口环境）
+    if (typeof window !== 'undefined' && window.self !== window.top) {
+      // iframe 环境：通过 bridge 发送到父窗口
+      bridge.send(message).catch(error => {
+        console.error('[UpdateManager] Failed to send ADD_TO_CHAT via bridge:', error);
+        // 如果 bridge 发送失败，回退到直接使用 postMessage
+        window.parent.postMessage(message, '*');
+      });
+    } else {
+      // 主窗口环境：直接使用 postMessage
+      window.postMessage(message, '*');
+    }
+
+    // Format alert message with source info
+    let alertMessage = '已添加到聊天:\n\n';
+    if (sourceInfo) {
+      alertMessage += `文件: ${sourceInfo.fileName}\n`;
+      alertMessage += `位置: L${sourceInfo.lineNumber}\n`;
+      alertMessage += `\n`;
+    }
+    alertMessage += `内容:\n${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`;
+
+    console.log('[UpdateManager] Add to chat:', alertMessage);
   }
 
   /**
@@ -502,22 +482,7 @@ export class UpdateManager {
     newClass: string,
     sourceInfo: SourceInfo
   ): Promise<UpdateResult> {
-    const oldClass = element.className;
-    const updateId = this.generateUpdateId();
-
-    const update: UpdateState = {
-      id: updateId,
-      operation: 'class_update',
-      sourceInfo,
-      element,
-      oldValue: oldClass,
-      newValue: newClass,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    };
-
-    return this.processUpdate(update);
+    return this.editManager.updateStyle(element, newClass, sourceInfo);
   }
 
   /**
@@ -526,24 +491,10 @@ export class UpdateManager {
   public updateContent(
     element: HTMLElement,
     newContent: string,
-    sourceInfo: SourceInfo
+    sourceInfo?: SourceInfo,
+    oldValue?: string
   ): Promise<UpdateResult> {
-    const oldContent = element.innerText;
-    const updateId = this.generateUpdateId();
-
-    const update: UpdateState = {
-      id: updateId,
-      operation: 'content_update',
-      sourceInfo,
-      element,
-      oldValue: oldContent,
-      newValue: newContent,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    };
-
-    return this.processUpdate(update);
+    return this.editManager.updateContent(element, newContent, sourceInfo, oldValue);
   }
 
   /**
@@ -555,22 +506,7 @@ export class UpdateManager {
     newValue: string,
     sourceInfo: SourceInfo
   ): Promise<UpdateResult> {
-    const oldValue = element.getAttribute(attributeName) || '';
-    const updateId = this.generateUpdateId();
-
-    const update: UpdateState = {
-      id: updateId,
-      operation: 'attribute_update',
-      sourceInfo,
-      element,
-      oldValue,
-      newValue,
-      status: 'pending',
-      timestamp: Date.now(),
-      retryCount: 0,
-    };
-
-    return this.processUpdate(update);
+    return this.editManager.updateAttribute(element, attributeName, newValue, sourceInfo);
   }
 
   /**
@@ -639,66 +575,7 @@ export class UpdateManager {
    * 处理更新操作
    */
   private async processUpdate(update: UpdateState): Promise<UpdateResult> {
-    // 验证更新
-    if (!this.validateUpdate(update)) {
-      return {
-        success: false,
-        element: update.element,
-        updateId: update.id,
-        error: 'Update validation failed',
-      };
-    }
-
-    // 标记为处理中
-    update.status = 'processing';
-    this.processingUpdates.add(update.id);
-
-    try {
-      // 应用DOM更新
-      this.applyUpdateToDOM(update);
-
-      // 调用API保存到源码
-      const serverResponse = await this.saveToSource(update);
-
-      // 标记为完成
-      update.status = 'completed';
-
-      // 添加到历史记录
-      this.updateHistory.push(update);
-
-      // 触发回调
-      this.notifyCallbacks(update.operation, update);
-
-      // 如果启用了自动保存，触发保存
-      if (this.config.autoSave) {
-        this.triggerAutoSave();
-      }
-
-      return {
-        success: true,
-        element: update.element,
-        updateId: update.id,
-        serverResponse,
-      };
-    } catch (error) {
-      update.status = 'failed';
-      update.error = error instanceof Error ? error.message : 'Unknown error';
-
-      // 重试机制
-      if (update.retryCount < this.config.maxRetries) {
-        update.retryCount++;
-        return this.processUpdate(update);
-      }
-
-      return {
-        success: false,
-        element: update.element,
-        updateId: update.id,
-        error: update.error,
-      };
-    } finally {
-      this.processingUpdates.delete(update.id);
-    }
+    return this.updateService.processUpdate(update);
   }
 
   /**
@@ -707,169 +584,13 @@ export class UpdateManager {
   private async processBatchUpdate(
     updates: UpdateState[]
   ): Promise<UpdateResult[]> {
-    try {
-      // 构建批量API请求
-      const batchRequest = {
-        updates: updates.map(update => ({
-          filePath: update.sourceInfo.fileName,
-          line: update.sourceInfo.lineNumber,
-          column: update.sourceInfo.columnNumber,
-          type: update.operation === 'style_update' ? 'style' : 'content',
-          newValue: update.newValue,
-          originalValue: update.oldValue,
-        })),
-      };
-
-      // 调用批量API
-      const response = await fetch('/__appdev_design_mode/batch-update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(batchRequest),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Batch update failed: ${response.statusText}`);
-      }
-
-      const results = await response.json();
-
-      // 标记所有更新为完成
-      updates.forEach(update => {
-        update.status = 'completed';
-        this.updateHistory.push(update);
-        this.notifyCallbacks(update.operation, update);
-      });
-
-      return results.map((result: any, index: number) => ({
-        success: result.success,
-        element: updates[index].element,
-        updateId: updates[index].id,
-        serverResponse: result,
-      }));
-    } catch (error) {
-      // 标记所有更新为失败
-      updates.forEach(update => {
-        update.status = 'failed';
-        update.error = error instanceof Error ? error.message : 'Unknown error';
-      });
-
-      return updates.map(update => ({
-        success: false,
-        element: update.element,
-        updateId: update.id,
-        error: update.error,
-      }));
-    }
-  }
-
-  /**
-   * 应用更新到DOM
-   */
-  private applyUpdateToDOM(update: UpdateState) {
-    const { element, operation, newValue, oldValue } = update;
-
-    switch (operation) {
-      case 'style_update':
-      case 'class_update':
-        element.className = newValue;
-        break;
-      case 'content_update':
-        element.innerText = newValue;
-        break;
-      case 'attribute_update':
-        // 这里需要从sourceInfo中获取属性名
-        // 目前简化为设置data-attribute
-        element.setAttribute('data-updated-value', newValue);
-        break;
-    }
-  }
-
-  /**
-   * 保存到源码
-   */
-  private async saveToSource(update: UpdateState): Promise<any> {
-    const response = await fetch('/__appdev_design_mode/update', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        filePath: update.sourceInfo.fileName,
-        line: update.sourceInfo.lineNumber,
-        column: update.sourceInfo.columnNumber,
-        newValue: update.newValue,
-        originalValue: update.oldValue,
-        type: update.operation === 'style_update' ? 'style' : 'content',
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to save source: ${response.statusText}`);
-    }
-
-    return await response.json();
-  }
-
-  /**
-   * 验证更新
-   */
-  private validateUpdate(update: UpdateState): boolean {
-    // 验证源码映射
-    if (this.config.validation.validateSource) {
-      if (
-        !update.sourceInfo.fileName ||
-        update.sourceInfo.lineNumber === null ||
-        update.sourceInfo.columnNumber === null
-      ) {
-        return false;
-      }
-    }
-
-    // 验证值
-    if (this.config.validation.validateValue) {
-      if (update.newValue.length > this.config.validation.maxLength) {
-        return false;
-      }
-    }
-
-    return true;
+    return this.updateService.processBatchUpdate(updates);
   }
 
   /**
    * 提取源码信息
    */
-  private extractSourceInfo(element: HTMLElement): SourceInfo | null {
-    const sourceInfoStr = element.getAttribute('data-source-info');
-    if (sourceInfoStr) {
-      try {
-        const sourceInfo = JSON.parse(sourceInfoStr);
-        return {
-          fileName: sourceInfo.fileName,
-          lineNumber: sourceInfo.lineNumber,
-          columnNumber: sourceInfo.columnNumber,
-        };
-      } catch (e) {
-        console.warn('[UpdateManager] Failed to parse source info:', e);
-      }
-    }
 
-    // 备用方案
-    const fileName = element.getAttribute('data-source-file');
-    const lineStr = element.getAttribute('data-source-line');
-    const columnStr = element.getAttribute('data-source-column');
-
-    if (fileName && lineStr && columnStr) {
-      return {
-        fileName,
-        lineNumber: parseInt(lineStr, 10),
-        columnNumber: parseInt(columnStr, 10),
-      };
-    }
-
-    return null;
-  }
 
   /**
    * 生成更新ID
@@ -910,13 +631,12 @@ export class UpdateManager {
    * 撤销上一次更新
    */
   public undoLastUpdate(): boolean {
-    const lastUpdate = this.updateHistory.pop();
+    const lastUpdate = this.historyManager.undo();
     if (!lastUpdate) return false;
 
     // 恢复DOM
     lastUpdate.element.innerText = lastUpdate.oldValue;
     lastUpdate.element.className = lastUpdate.oldValue;
-    lastUpdate.status = 'reverted';
 
     console.log('[UpdateManager] Undone update:', lastUpdate.id);
     return true;
@@ -926,17 +646,12 @@ export class UpdateManager {
    * 重做上一次更新
    */
   public redoLastUpdate(): boolean {
-    const revertedUpdates = this.updateHistory.filter(
-      u => u.status === 'reverted'
-    );
-    if (revertedUpdates.length === 0) return false;
-
-    const lastReverted = revertedUpdates[revertedUpdates.length - 1];
+    const lastReverted = this.historyManager.redo();
+    if (!lastReverted) return false;
 
     // 重新应用更新
     lastReverted.element.innerText = lastReverted.newValue;
     lastReverted.element.className = lastReverted.newValue;
-    lastReverted.status = 'completed';
 
     console.log('[UpdateManager] Redid update:', lastReverted.id);
     return true;
@@ -981,7 +696,7 @@ export class UpdateManager {
    * 获取更新历史
    */
   public getUpdateHistory(): UpdateState[] {
-    return [...this.updateHistory];
+    return this.historyManager.getHistory();
   }
 
   /**
@@ -989,9 +704,7 @@ export class UpdateManager {
    */
   public destroy() {
     // 停止观察器
-    if (this.observer) {
-      this.observer.disconnect();
-    }
+    this.observerManager.disable();
 
     // 清除定时器
     if (this.batchTimer) {
@@ -1004,7 +717,7 @@ export class UpdateManager {
 
     // 清除队列
     this.updateQueue = [];
-    this.updateHistory = [];
+    this.historyManager.clear();
     this.callbacks.clear();
   }
 }
@@ -1015,7 +728,7 @@ export class UpdateManager {
 export const useUpdateManager = (config?: Partial<UpdateManagerConfig>) => {
   const updateManagerRef = useRef<UpdateManager | null>(null);
   const [updateStates, setUpdateStates] = useState<UpdateState[]>([]);
-  const { config: designModeConfig } = useDesignMode();
+  const { config: designModeConfig, isDesignMode, selectedElement } = useDesignMode();
 
   React.useEffect(() => {
     updateManagerRef.current = new UpdateManager({
@@ -1047,6 +760,15 @@ export const useUpdateManager = (config?: Partial<UpdateManagerConfig>) => {
       updateManagerRef.current = null;
     };
   }, [designModeConfig]);
+
+  // Sync design mode state and selected element with UpdateManager
+  const { selectElement } = useDesignMode();
+  React.useEffect(() => {
+    if (updateManagerRef.current) {
+      updateManagerRef.current.setDesignModeState(isDesignMode, selectedElement, selectElement);
+    }
+  }, [isDesignMode, selectedElement, selectElement]);
+
 
   return {
     updateManager: updateManagerRef.current,

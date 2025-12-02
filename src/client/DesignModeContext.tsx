@@ -22,6 +22,7 @@ import {
   HealthCheckResponseMessage,
 } from '../types/messages';
 import { bridge, messageValidator } from './bridge';
+import { AttributeNames } from './utils/attributeNames';
 
 export interface Modification {
   id: string;
@@ -85,7 +86,6 @@ interface DesignModeContextType {
     message: T,
     responseType: R['type']
   ) => Promise<R>;
-  getElementState: (sourceInfo: SourceInfo) => Promise<any>;
   healthCheck: () => Promise<any>;
 }
 
@@ -287,7 +287,7 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[data-source-file="${sourceInfo.fileName}"][data-source-line="${sourceInfo.lineNumber}"][data-source-column="${sourceInfo.columnNumber}"]`;
+        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
         console.log(
           '[DesignMode] Looking for element with selector:',
           selector
@@ -302,9 +302,9 @@ export const DesignModeProvider: React.FC<{
             'Selector:',
             selector
           );
-          // 尝试查找所有带有 data-source-file 属性的元素
+          // 尝试查找所有带有 file 属性的元素
           const allElements = document.querySelectorAll(
-            `[data-source-file="${sourceInfo.fileName}"]`
+            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
           );
           console.log(
             '[DesignMode] Found elements with same file:',
@@ -312,9 +312,9 @@ export const DesignModeProvider: React.FC<{
           );
           if (allElements.length > 0) {
             console.log('[DesignMode] First element attributes:', {
-              file: allElements[0].getAttribute('data-source-file'),
-              line: allElements[0].getAttribute('data-source-line'),
-              column: allElements[0].getAttribute('data-source-column'),
+              file: allElements[0].getAttribute(AttributeNames.file),
+              line: allElements[0].getAttribute(AttributeNames.line),
+              column: allElements[0].getAttribute(AttributeNames.column),
             });
           }
 
@@ -341,7 +341,13 @@ export const DesignModeProvider: React.FC<{
         );
 
         // 应用样式更新
+        element.setAttribute('data-ignore-mutation', 'true');
         element.className = newClass;
+        // Use setTimeout to ensure MutationObserver sees the attribute
+        setTimeout(() => {
+            element.removeAttribute('data-ignore-mutation');
+        }, 0);
+
         console.log(
           '[DesignMode] Applied new class to element:',
           element.className
@@ -437,7 +443,7 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[data-source-file="${sourceInfo.fileName}"][data-source-line="${sourceInfo.lineNumber}"][data-source-column="${sourceInfo.columnNumber}"]`;
+        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
         console.log(
           '[DesignMode] Looking for element with selector:',
           selector
@@ -452,9 +458,9 @@ export const DesignModeProvider: React.FC<{
             'Selector:',
             selector
           );
-          // 尝试查找所有带有 data-source-file 属性的元素
+          // 尝试查找所有带有 file 属性的元素
           const allElements = document.querySelectorAll(
-            `[data-source-file="${sourceInfo.fileName}"]`
+            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
           );
           console.log(
             '[DesignMode] Found elements with same file:',
@@ -462,9 +468,9 @@ export const DesignModeProvider: React.FC<{
           );
           if (allElements.length > 0) {
             console.log('[DesignMode] First element attributes:', {
-              file: allElements[0].getAttribute('data-source-file'),
-              line: allElements[0].getAttribute('data-source-line'),
-              column: allElements[0].getAttribute('data-source-column'),
+              file: allElements[0].getAttribute(AttributeNames.file),
+              line: allElements[0].getAttribute(AttributeNames.line),
+              column: allElements[0].getAttribute(AttributeNames.column),
             });
           }
 
@@ -491,7 +497,13 @@ export const DesignModeProvider: React.FC<{
         );
 
         // 应用内容更新
+        element.setAttribute('data-ignore-mutation', 'true');
         element.innerText = newContent;
+        // Use setTimeout to ensure MutationObserver sees the attribute
+        setTimeout(() => {
+            element.removeAttribute('data-ignore-mutation');
+        }, 0);
+
         console.log(
           '[DesignMode] Applied new content to element:',
           element.innerText
@@ -601,9 +613,13 @@ export const DesignModeProvider: React.FC<{
             }
 
             if (update.type === 'style') {
+              element.setAttribute('data-ignore-mutation', 'true');
               element.className = update.newValue;
+              setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
             } else if (update.type === 'content') {
+              element.setAttribute('data-ignore-mutation', 'true');
               element.innerText = update.newValue;
+              setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
             }
 
             await updateSource(
@@ -641,7 +657,7 @@ export const DesignModeProvider: React.FC<{
    */
   const findElementBySourceInfo = useCallback(
     (sourceInfo: SourceInfo): HTMLElement | null => {
-      const selector = `[data-source-file="${sourceInfo.fileName}"][data-source-line="${sourceInfo.lineNumber}"][data-source-column="${sourceInfo.columnNumber}"]`;
+      const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
       return document.querySelector(selector) as HTMLElement;
     },
     []
@@ -651,15 +667,19 @@ export const DesignModeProvider: React.FC<{
    * 元素选择处理
    */
   const selectElement = useCallback(
-    (element: HTMLElement | null) => {
+    async (element: HTMLElement | null) => {
       setSelectedElement(element);
 
       // 发送选择信息到父窗口（仅在iframe环境下）
       if (element && config.iframeMode?.enabled) {
-        const sourceInfoStr = element.getAttribute('data-source-info');
+        const sourceInfoStr = element.getAttribute(AttributeNames.info);
         if (sourceInfoStr) {
           try {
             const sourceInfo = JSON.parse(sourceInfoStr);
+
+            // 判断是否为静态文本：检查元素是否有 static-content 属性
+            const isStaticText = element.hasAttribute(AttributeNames.staticContent);
+
             const elementInfo: ElementInfo = {
               tagName: element.tagName.toLowerCase(),
               className: element.className,
@@ -669,21 +689,22 @@ export const DesignModeProvider: React.FC<{
                 lineNumber: sourceInfo.lineNumber,
                 columnNumber: sourceInfo.columnNumber,
               },
+              isStaticText: isStaticText || false, // 默认为 false
             };
-
+            
             sendToParent({
               type: 'ELEMENT_SELECTED',
               payload: { elementInfo },
               timestamp: Date.now(),
             });
 
-            console.log('[DesignMode] Sent ELEMENT_SELECTED to parent');
+            console.log('[DesignMode] Sent ELEMENT_SELECTED to parent', elementInfo);
           } catch (e) {
             console.warn('Failed to parse source info:', e);
           }
         } else {
           console.warn(
-            '[DesignMode] Element selected but missing data-source-info attribute:',
+            `[DesignMode] Element selected but missing ${AttributeNames.info} attribute:`,
             element
           );
         }
@@ -761,8 +782,8 @@ export const DesignModeProvider: React.FC<{
    */
   const extractSourceInfo = useCallback(
     (element: HTMLElement): SourceInfo | null => {
-      // 优先尝试从 data-source-info JSON 属性获取
-      const sourceInfoStr = element.getAttribute('data-source-info');
+      // 优先尝试从 info JSON 属性获取
+      const sourceInfoStr = element.getAttribute(AttributeNames.info);
       if (sourceInfoStr) {
         try {
           const sourceInfo = JSON.parse(sourceInfoStr);
@@ -772,14 +793,14 @@ export const DesignModeProvider: React.FC<{
             columnNumber: sourceInfo.columnNumber,
           };
         } catch (e) {
-          console.warn('Failed to parse data-source-info:', e);
+          console.warn(`Failed to parse ${AttributeNames.info}:`, e);
         }
       }
 
       // 备用方案：逐个属性获取
-      const fileName = element.getAttribute('data-source-file');
-      const lineStr = element.getAttribute('data-source-line');
-      const columnStr = element.getAttribute('data-source-column');
+      const fileName = element.getAttribute(AttributeNames.file);
+      const lineStr = element.getAttribute(AttributeNames.line);
+      const columnStr = element.getAttribute(AttributeNames.column);
 
       if (fileName && lineStr && columnStr) {
         return {
@@ -844,6 +865,7 @@ export const DesignModeProvider: React.FC<{
    */
   const updateElementContent = useCallback(
     async (element: HTMLElement, newContent: string) => {
+      const sourceInfo = extractSourceInfo(element);
       const originalContent = element.innerText;
 
       console.log('[DesignMode] Updating content:', {
@@ -1004,23 +1026,6 @@ export const DesignModeProvider: React.FC<{
   );
 
   /**
-   * 获取元素状态
-   */
-  const getElementState = useCallback(
-    async (sourceInfo: SourceInfo) => {
-      return await sendMessageWithResponse(
-        {
-          type: 'GET_ELEMENT_STATE',
-          payload: { sourceInfo },
-          timestamp: Date.now(),
-        },
-        'ELEMENT_STATE_RESPONSE'
-      );
-    },
-    [sendMessageWithResponse]
-  );
-
-  /**
    * 健康检查
    */
   const healthCheck = useCallback(async () => {
@@ -1054,7 +1059,6 @@ export const DesignModeProvider: React.FC<{
         // 桥接器方法
         sendMessage,
         sendMessageWithResponse,
-        getElementState,
         healthCheck,
       }}
     >

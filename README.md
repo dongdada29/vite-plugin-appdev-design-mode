@@ -14,13 +14,48 @@
 
 ## Installation
 
+### 一键安装（推荐）
+
+使用 CLI 工具一键安装插件并自动配置 `vite.config.ts`：
+
+```bash
+npx @xagi/vite-plugin-design-mode install
+```
+
+这个命令会：
+- 自动检测项目使用的包管理器（npm/pnpm/yarn）
+- 安装或升级插件到最新版本
+- 自动在 `vite.config.ts` 中添加插件配置
+- 使用默认配置，无需手动传参
+
+### 一键卸载
+
+使用 CLI 工具一键卸载插件并清理配置：
+
+```bash
+npx @xagi/vite-plugin-design-mode uninstall
+```
+
+这个命令会：
+- 从 `package.json` 中移除插件依赖
+- 从 `vite.config.ts` 中移除 import 和插件配置
+- 自动清理所有相关配置
+
+### 手动安装
+
+如果需要手动安装：
+
 ```bash
 npm install @xagi/vite-plugin-design-mode --save-dev
 # or
 yarn add @xagi/vite-plugin-design-mode --dev
+# or
+pnpm add @xagi/vite-plugin-design-mode -D
 ```
 
 ## Basic Usage
+
+使用一键安装后，插件已自动配置，`vite.config.ts` 中会包含：
 
 ```typescript
 // vite.config.ts
@@ -31,10 +66,17 @@ import appdevDesignMode from '@xagi/vite-plugin-design-mode';
 export default defineConfig({
   plugins: [
     react(),
-    appdevDesignMode()
+    appdevDesignMode()  // 使用默认配置，无需传参
   ]
 });
 ```
+
+**默认配置说明：**
+- `enabled: true` - 启用插件
+- `enableInProduction: false` - 仅在开发环境生效，生产构建时自动禁用
+- `verbose: true` - 启用详细日志
+- `include: ['src/**/*.{ts,tsx}']` - 处理 src 目录下的 TypeScript/TSX 文件
+- `exclude: ['node_modules', 'dist', 'src/components/ui']` - 排除指定目录
 
 ## Advanced Usage
 
@@ -78,15 +120,19 @@ export default defineConfig({
 
 ## 生成属性
 
-插件处理的元素将具有以下属性：
+插件处理的元素将具有以下属性（默认前缀为 `data-source`，可通过 `attributePrefix` 配置项自定义）：
 
-- `data-source-file`: 源码文件路径
-- `data-source-line`: 源码行号
-- `data-source-column`: 源码列号
-- `data-source-info`: 包含完整源码映射信息的JSON字符串
-- `data-source-element-id`: 唯一元素标识符，格式为`文件路径:行号:列号_标签名_类名或ID`
-- `data-source-component`: 组件名称（如果适用）
-- `data-source-function`: 函数名称（如果适用）
+- `{prefix}-file`: 源码文件路径
+- `{prefix}-line`: 源码行号
+- `{prefix}-column`: 源码列号
+- `{prefix}-info`: 包含完整源码映射信息的JSON字符串
+- `{prefix}-element-id`: 唯一元素标识符，格式为`文件路径:行号:列号_标签名_类名或ID`
+- `{prefix}-component`: 组件名称（如果适用）
+- `{prefix}-function`: 函数名称（如果适用）
+- `{prefix}-position`: 位置信息，格式为`行号:列号`
+- `{prefix}-static-content`: 标记元素是否包含纯静态内容（值为 `'true'`），用于判断元素是否可以直接编辑
+
+**注意**：这些属性使用可配置的前缀，默认值为 `data-source`。通过设置 `attributePrefix` 选项，可以避免与用户自定义的 `data-*` 属性冲突。例如，设置 `attributePrefix: 'data-appdev'` 后，属性名将变为 `data-appdev-file`、`data-appdev-line`、`data-appdev-static-content` 等。
 
 ## 浏览器集成
 
@@ -150,9 +196,9 @@ window.parent.postMessage({
 | `enabled` | boolean | `true` | 是否启用设计模式插件 |
 | `enableInProduction` | boolean | `false` | 是否在生产环境启用，通常保持false |
 | `attributePrefix` | string | `'data-source'` | 自定义源码映射属性的前缀 |
-| `verbose` | boolean | `false` | 是否启用详细日志输出，便于调试 |
-| `exclude` | string[] | `['node_modules', '.git']` | 排除处理的文件模式和目录 |
-| `include` | string[] | `['**/*.{js,jsx,ts,tsx}']` | 包含处理的文件模式，支持glob语法 |
+| `verbose` | boolean | `true` | 是否启用详细日志输出，便于调试 |
+| `exclude` | string[] | `['node_modules', 'dist', 'src/components/ui']` | 排除处理的文件模式和目录 |
+| `include` | string[] | `['src/**/*.{ts,tsx}']` | 包含处理的文件模式，支持glob语法 |
 
 ### 配置示例
 

@@ -1,8 +1,14 @@
 import React, { useEffect } from 'react';
 import { useDesignMode } from './DesignModeContext';
+import { useUpdateManager } from './UpdateManager';
+import { AttributeNames } from './utils/attributeNames';
 
 export const DesignModeManager: React.FC = () => {
   const { isDesignMode, selectElement, selectedElement, updateElementContent } = useDesignMode();
+
+  // Initialize UpdateManager to enable context menu and direct editing features
+  useUpdateManager();
+
 
   useEffect(() => {
     if (!isDesignMode) {
@@ -19,6 +25,9 @@ export const DesignModeManager: React.FC = () => {
       // OR we need to check if target is part of our UI.
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
 
+      // Don't handle clicks on context menu
+      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
+
       e.preventDefault();
       e.stopPropagation();
 
@@ -26,13 +35,23 @@ export const DesignModeManager: React.FC = () => {
       selectElement(target);
     };
 
+    // Double-click handling is now managed by UpdateManager → EditManager
+    // This prevents conflicts and ensures data-ignore-mutation is properly set
+    /*
     const handleDoubleClick = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
+      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
 
       e.preventDefault();
       e.stopPropagation();
 
       const target = e.target as HTMLElement;
+
+      // Check if element is marked as static content
+      if (!target.hasAttribute(AttributeNames.staticContent)) {
+        // alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
+        return;
+      }
 
       // IMPORTANT: Save original content BEFORE enabling editing
       const originalContent = target.innerText;
@@ -53,7 +72,7 @@ export const DesignModeManager: React.FC = () => {
         const newContent = target.innerText;
         if (newContent !== originalContent) {
           // Create a custom version of updateElementContent that uses our saved original
-          const sourceInfoStr = target.getAttribute('data-source-info');
+          const sourceInfoStr = target.getAttribute(AttributeNames.info);
           let filePath: string | null = null;
           let line: number | null = null;
           let column: number | null = null;
@@ -65,7 +84,7 @@ export const DesignModeManager: React.FC = () => {
               line = sourceInfo.lineNumber;
               column = sourceInfo.columnNumber;
             } catch (e) {
-              console.warn('Failed to parse data-source-info:', e);
+              console.warn(`Failed to parse ${AttributeNames.info}:`, e);
             }
           }
 
@@ -102,18 +121,20 @@ export const DesignModeManager: React.FC = () => {
           target.blur(); // Will trigger handleBlur
         }
         if (e.key === 'Escape') {
-          // Cancel?
-          // For now, just blur.
-          target.blur();
+          e.preventDefault();
+          target.innerText = originalContent;
+          cleanup();
         }
       };
 
       target.addEventListener('blur', handleBlur);
       target.addEventListener('keydown', handleKeyDown);
     };
+    */
 
     const handleMouseOver = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
+      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
 
       const target = e.target as HTMLElement;
       target.setAttribute('data-design-hover', 'true');
@@ -121,11 +142,14 @@ export const DesignModeManager: React.FC = () => {
 
     const handleMouseOut = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      target.removeAttribute('data-design-hover');
+      // 如果元素有右键菜单保持的 hover 状态，不要移除它
+      if (!target.hasAttribute('data-context-menu-hover')) {
+        target.removeAttribute('data-design-hover');
+      }
     };
 
     document.addEventListener('click', handleClick, true);
-    document.addEventListener('dblclick', handleDoubleClick, true);
+    // document.addEventListener('dblclick', handleDoubleClick, true);
     document.addEventListener('mouseover', handleMouseOver);
     document.addEventListener('mouseout', handleMouseOut);
 
@@ -165,7 +189,7 @@ export const DesignModeManager: React.FC = () => {
       }
 
       document.removeEventListener('click', handleClick, true);
-      document.removeEventListener('dblclick', handleDoubleClick, true);
+      // document.removeEventListener('dblclick', handleDoubleClick, true);
       document.removeEventListener('mouseover', handleMouseOver);
       document.removeEventListener('mouseout', handleMouseOut);
 

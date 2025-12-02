@@ -20,7 +20,13 @@ export function transformSourceCode(
       code: true,
       sourceType: 'module',
       filename: id,
-      presets: ['typescript', 'react'],
+      presets: [
+        'typescript',
+        ['react', {
+          runtime: 'automatic', // Use automatic JSX runtime (React 17+)
+          development: false,   // Use production runtime for better performance
+        }]
+      ],
       plugins: [
         createSourceMappingPlugin(id, options)
       ],

@@ -1,13 +1,13 @@
 import React from '../../react';
 import { useState, useEffect } from 'react';
 import { Card, Button, Input, Select, Space, Row, Col, Divider, Tooltip, Badge } from 'antd';
-import { 
-  FontSizeOutlined, 
-  BoldOutlined, 
-  ItalicOutlined, 
-  UnderlineOutlined, 
-  AlignLeftOutlined, 
-  AlignCenterOutlined, 
+import {
+  FontSizeOutlined,
+  BoldOutlined,
+  ItalicOutlined,
+  UnderlineOutlined,
+  AlignLeftOutlined,
+  AlignCenterOutlined,
   AlignRightOutlined,
   EditOutlined,
   HistoryOutlined,
@@ -177,7 +177,7 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
    */
   const applyChanges = () => {
     if (!selectedElement) return;
-    
+
     onUpdateContent({
       sourceInfo: selectedElement.sourceInfo,
       newContent: editingContent
@@ -197,7 +197,7 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const selectedText = editingContent.substring(start, end);
-    
+
     let newContent = editingContent;
     let newSelectedText = selectedText;
 
@@ -214,9 +214,9 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
         break;
     }
 
-    newContent = 
-      editingContent.substring(0, start) + 
-      newSelectedText + 
+    newContent =
+      editingContent.substring(0, start) +
+      newSelectedText +
       editingContent.substring(end);
 
     handleContentChange(newContent);
@@ -253,7 +253,7 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
   const getTextStats = () => {
     const lines = editingContent.split('\n');
     const paragraphs = editingContent.split('\n\n').filter(p => p.trim().length > 0);
-    
+
     return {
       lines: lines.length,
       paragraphs: paragraphs.length,
@@ -276,10 +276,26 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
     );
   }
 
+  // Check if element is editable (has static text)
+  if (selectedElement.isStaticText === false) {
+    return (
+      <Card title="内容编辑" className="h-full">
+        <div className="flex items-center justify-center h-64 text-orange-500">
+          <div className="text-center">
+            <EditOutlined className="text-4xl mb-4" />
+            <p className="font-semibold mb-2">该元素不可编辑</p>
+            <p className="text-sm text-gray-600">只有纯静态文本可以编辑</p>
+            <p className="text-xs text-gray-500 mt-1">（不包含变量或表达式）</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   const stats = getTextStats();
 
   return (
-    <Card 
+    <Card
       title={
         <div className="flex items-center gap-2">
           <EditOutlined />
@@ -291,8 +307,8 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
       extra={
         <Space>
           <Tooltip title="预览模式">
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               icon={isPreviewMode ? <EditOutlined /> : <EyeOutlined />}
               onClick={() => setIsPreviewMode(!isPreviewMode)}
               type={isPreviewMode ? 'primary' : 'default'}
@@ -303,9 +319,9 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
           <Button size="small" onClick={clearContent} icon={<ClearOutlined />}>
             清除
           </Button>
-          <Button 
-            type="primary" 
-            size="small" 
+          <Button
+            type="primary"
+            size="small"
             onClick={applyChanges}
             disabled={!selectedElement || editingContent === originalContent}
             icon={<SaveOutlined />}
@@ -339,11 +355,10 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.key
+                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
@@ -370,13 +385,13 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
                   rows={8}
                   className="font-mono text-sm"
                 />
-                
+
                 {/* 快速工具栏 */}
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
                   <Space size="small">
                     <Tooltip title="撤销">
-                      <Button 
-                        size="small" 
+                      <Button
+                        size="small"
                         icon={<UndoOutlined />}
                         disabled={contentHistory.length === 0}
                         onClick={() => contentHistory.length > 0 && restoreFromHistory(contentHistory[0])}
@@ -385,15 +400,15 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
                     <Divider type="vertical" />
                     {contentTools.formatting.map((format, index) => (
                       <Tooltip key={index} title={format.description}>
-                        <Button 
-                          size="small" 
+                        <Button
+                          size="small"
                           icon={format.icon}
                           onClick={() => insertFormatting(format.value)}
                         />
                       </Tooltip>
                     ))}
                   </Space>
-                  
+
                   <span className="text-xs text-gray-500">
                     {wordCount} 词 | {characterCount} 字符
                   </span>
@@ -489,15 +504,15 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
           <div>
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-sm font-medium text-gray-900">编辑历史</h4>
-              <Button 
-                size="small" 
+              <Button
+                size="small"
                 icon={<HistoryOutlined />}
                 onClick={() => setContentHistory([])}
               >
                 清除历史
               </Button>
             </div>
-            
+
             {contentHistory.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <HistoryOutlined className="text-2xl mb-2" />
@@ -553,7 +568,7 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
                 <div className="text-sm text-gray-600">段落数</div>
               </div>
             </div>
-            
+
             {/* 阅读时间估算 */}
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="text-sm text-blue-900">
@@ -578,8 +593,8 @@ export const ContentPanel: React.FC<ContentPanelProps> = ({
               </label>
             </Col>
             <Col span={12}>
-              <Button 
-                size="small" 
+              <Button
+                size="small"
                 onClick={restoreOriginal}
                 disabled={editingContent === originalContent}
                 block

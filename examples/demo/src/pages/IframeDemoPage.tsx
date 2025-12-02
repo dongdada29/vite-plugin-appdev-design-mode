@@ -2,6 +2,7 @@ import React from '../react';
 import { useState, useEffect } from 'react';
 import type { ElementInfo } from '@/types/messages';
 
+
 // 确保React在所有情况下都可用
 if (typeof React === 'undefined') {
   throw new Error(
@@ -25,9 +26,36 @@ export default function IframeDemoPage() {
     }>
   >([]);
 
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
+
   // Listen for messages from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // Debug log for message source
+      if (event.data.type === 'ELEMENT_SELECTED') {
+        console.log('[Parent] Received ELEMENT_SELECTED', {
+          source: event.source,
+          iframeWindow: iframeRef.current?.contentWindow,
+          isMatch: iframeRef.current && event.source === iframeRef.current.contentWindow,
+          data: event.data
+        });
+      }
+      if (event.data.type === 'ADD_TO_CHAT') {
+        return console.log('[Parent] Add to chat:', event.data.payload);
+      }
+
+      if (event.data.type === 'COPY_ELEMENT') {
+        return console.log('[Parent] Copy element:', event.data.payload);
+      }
+
+      // Only accept messages from the iframe
+      if (iframeRef.current && event.source !== iframeRef.current.contentWindow) {
+        if (event.data.type === 'ELEMENT_SELECTED') {
+          console.warn('[Parent] Ignoring message from non-iframe source');
+        }
+        return;
+      }
+
       const { type, payload } = event.data;
 
       switch (type) {
@@ -36,9 +64,7 @@ export default function IframeDemoPage() {
           break;
 
         case 'ELEMENT_SELECTED':
-          console.log('[Parent] Element selected - full payload:', payload);
-          console.log('[Parent] ElementInfo:', payload.elementInfo);
-          console.log('[Parent] SourceInfo:', payload.elementInfo?.sourceInfo);
+          console.log('[Parent] Processing ELEMENT_SELECTED', payload);
 
           // 验证 sourceInfo 是否有效
           if (
@@ -70,6 +96,7 @@ export default function IframeDemoPage() {
         case 'STYLE_UPDATED':
           console.log('[Parent] Style updated:', payload);
           break;
+        
       }
     };
 
@@ -124,13 +151,30 @@ export default function IframeDemoPage() {
     });
   };
 
+  const lastSelectedElementRef = React.useRef(selectedElement);
+
   // Real-time content update
   useEffect(() => {
-    if (!selectedElement || debouncedContent === selectedElement.textContent) return;
+    if (!selectedElement) return;
 
+    // If selection changed, skip this update cycle
+    if (selectedElement !== lastSelectedElementRef.current) {
+      console.log('[Parent] Skipping content update due to selection change');
+      return;
+    }
+
+    console.log('[Parent] Content effect triggered', {
+      debouncedContent,
+      currentContent: selectedElement.textContent,
+      shouldUpdate: debouncedContent !== selectedElement.textContent
+    });
+
+    if (debouncedContent === selectedElement.textContent) return;
+
+    console.log('[Parent] Sending UPDATE_CONTENT', debouncedContent);
     upsertPendingChange('content', debouncedContent);
 
-    const iframe = document.querySelector('iframe');
+    const iframe = iframeRef.current;
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
         {
@@ -145,15 +189,23 @@ export default function IframeDemoPage() {
         '*'
       );
     }
-  }, [debouncedContent]);
+  }, [debouncedContent, selectedElement]); // Removed upsertPendingChange to fix infinite loop
 
   // Real-time style update
   useEffect(() => {
-    if (!selectedElement || debouncedClass === selectedElement.className) return;
+    if (!selectedElement) return;
+
+    // If selection changed, skip this update cycle
+    if (selectedElement !== lastSelectedElementRef.current) {
+      console.log('[Parent] Skipping style update due to selection change');
+      return;
+    }
+
+    if (debouncedClass === selectedElement.className) return;
 
     upsertPendingChange('style', debouncedClass);
 
-    const iframe = document.querySelector('iframe');
+    const iframe = iframeRef.current;
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
         {
@@ -168,7 +220,12 @@ export default function IframeDemoPage() {
         '*'
       );
     }
-  }, [debouncedClass]);
+  }, [debouncedClass, selectedElement]); // Removed upsertPendingChange to fix infinite loop
+
+  // Update lastSelectedElementRef AFTER other effects
+  useEffect(() => {
+    lastSelectedElementRef.current = selectedElement;
+  }, [selectedElement]);
 
   // Style Manager Logic
   const toggleStyle = (newStyle: string, categoryRegex: RegExp) => {
@@ -201,18 +258,17 @@ export default function IframeDemoPage() {
             <button
               key={color}
               onClick={() => toggleStyle(styleClass, new RegExp(`^${prefix}-[a-z]+(-\\d+)?$`))}
-              className={`w-8 h-8 rounded-full border-2 transition-all ${
-                isActive ? 'border-gray-900 scale-110' : 'border-transparent hover:scale-105'
-              } ${styleClass.replace('text-', 'bg-')}`} // Use bg color for preview
+              className={`w-8 h-8 rounded-full border-2 transition-all ${isActive ? 'border-gray-900 scale-110' : 'border-transparent hover:scale-105'
+                } ${styleClass.replace('text-', 'bg-')}`} // Use bg color for preview
               title={color}
             />
           );
         })}
         <button
-            onClick={() => toggleStyle('', new RegExp(`^${prefix}-[a-z]+(-\\d+)?$`))}
-            className="px-2 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100"
+          onClick={() => toggleStyle('', new RegExp(`^${prefix}-[a-z]+(-\\d+)?$`))}
+          className="px-2 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100"
         >
-            清除
+          清除
         </button>
       </div>
     </div>
@@ -223,21 +279,20 @@ export default function IframeDemoPage() {
       <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
       <div className="flex flex-wrap gap-2">
         {options.map(opt => {
-            const styleClass = opt.value ? `${prefix}-${opt.value}` : '';
-            const isActive = styleClass ? hasStyle(styleClass) : !options.some(o => o.value && hasStyle(`${prefix}-${o.value}`));
-            return (
-                <button
-                    key={opt.label}
-                    onClick={() => toggleStyle(styleClass, new RegExp(`^${prefix}(-[a-z0-9]+)?$`))}
-                    className={`px-3 py-1 text-sm rounded border transition-all ${
-                        isActive
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                >
-                    {opt.label}
-                </button>
-            )
+          const styleClass = opt.value ? `${prefix}-${opt.value}` : '';
+          const isActive = styleClass ? hasStyle(styleClass) : !options.some(o => o.value && hasStyle(`${prefix}-${o.value}`));
+          return (
+            <button
+              key={opt.label}
+              onClick={() => toggleStyle(styleClass, new RegExp(`^${prefix}(-[a-z0-9]+)?$`))}
+              className={`px-3 py-1 text-sm rounded border transition-all ${isActive
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+            >
+              {opt.label}
+            </button>
+          )
         })}
       </div>
     </div>
@@ -245,7 +300,8 @@ export default function IframeDemoPage() {
 
   // Toggle design mode in iframe
   const toggleIframeDesignMode = () => {
-    const iframe = document.querySelector('iframe');
+    const iframe = iframeRef.current;
+    console.log('[Parent] Toggling iframe design mode...', iframe);
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage(
         {
@@ -299,7 +355,7 @@ export default function IframeDemoPage() {
   };
 
   return (
-    <div className='min-h-screen bg-gray-100'>
+    <div className='min-h-screen bg-gray-100' data-selection-exclude="true">
       {/* Top Control Bar */}
       <div className='bg-white border-b border-gray-200 px-6 py-4'>
         <div className='flex items-center justify-between'>
@@ -330,11 +386,10 @@ export default function IframeDemoPage() {
             )}
             <button
               onClick={toggleIframeDesignMode}
-              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                iframeDesignMode
-                  ? 'bg-green-500 hover:bg-green-600 text-white'
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-              }`}
+              className={`px-6 py-2 rounded-lg font-semibold transition-all ${iframeDesignMode
+                ? 'bg-green-500 hover:bg-green-600 text-white'
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                }`}
             >
               {iframeDesignMode ? '✓ 设计模式已启用' : '启用设计模式'}
             </button>
@@ -369,51 +424,53 @@ export default function IframeDemoPage() {
                   </div>
                 </div>
 
-                {/* Content Editor */}
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 mb-2'>
-                    内容编辑
-                  </label>
-                  <textarea
-                    value={editingContent}
-                    onChange={e => setEditingContent(e.target.value)}
-                    className='w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
-                    rows={3}
-                  />
-                </div>
+                {/* Content Editor - 仅当 isStaticText 为 true 时显示 */}
+                {selectedElement.isStaticText && (
+                  <div>
+                    <label className='block text-sm font-medium text-gray-700 mb-2'>
+                      内容编辑
+                    </label>
+                    <textarea
+                      value={editingContent}
+                      onChange={e => setEditingContent(e.target.value)}
+                      className='w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+                      rows={3}
+                    />
+                  </div>
+                )}
 
                 <hr className="border-gray-200" />
 
                 {/* Smart Style Controls */}
                 <div>
-                    <h3 className="text-md font-bold text-gray-900 mb-4">样式设置</h3>
+                  <h3 className="text-md font-bold text-gray-900 mb-4">样式设置</h3>
 
-                    {renderColorPicker('bg', ['white', 'gray-100', 'red-100', 'blue-100', 'green-100', 'yellow-100', 'purple-100'], '背景颜色')}
-                    {renderColorPicker('text', ['gray-900', 'gray-500', 'red-600', 'blue-600', 'green-600', 'purple-600', 'white'], '文字颜色')}
+                  {renderColorPicker('bg', ['white', 'gray-100', 'red-100', 'blue-100', 'green-100', 'yellow-100', 'purple-100'], '背景颜色')}
+                  {renderColorPicker('text', ['gray-900', 'gray-500', 'red-600', 'blue-600', 'green-600', 'purple-600', 'white'], '文字颜色')}
 
-                    {renderSelect('p', [
-                        { label: '无', value: '0' },
-                        { label: '小', value: '2' },
-                        { label: '中', value: '4' },
-                        { label: '大', value: '8' },
-                        { label: '特大', value: '12' }
-                    ], '内边距 (Padding)')}
+                  {renderSelect('p', [
+                    { label: '无', value: '0' },
+                    { label: '小', value: '2' },
+                    { label: '中', value: '4' },
+                    { label: '大', value: '8' },
+                    { label: '特大', value: '12' }
+                  ], '内边距 (Padding)')}
 
-                    {renderSelect('rounded', [
-                        { label: '直角', value: 'none' },
-                        { label: '小圆角', value: 'sm' },
-                        { label: '圆角', value: 'md' },
-                        { label: '大圆角', value: 'lg' },
-                        { label: '全圆角', value: 'full' }
-                    ], '圆角 (Border Radius)')}
+                  {renderSelect('rounded', [
+                    { label: '直角', value: 'none' },
+                    { label: '小圆角', value: 'sm' },
+                    { label: '圆角', value: 'md' },
+                    { label: '大圆角', value: 'lg' },
+                    { label: '全圆角', value: 'full' }
+                  ], '圆角 (Border Radius)')}
 
-                    {renderSelect('text', [
-                        { label: '小', value: 'sm' },
-                        { label: '默认', value: 'base' },
-                        { label: '中', value: 'lg' },
-                        { label: '大', value: 'xl' },
-                        { label: '特大', value: '2xl' }
-                    ], '文字大小 (Font Size)')}
+                  {renderSelect('text', [
+                    { label: '小', value: 'sm' },
+                    { label: '默认', value: 'base' },
+                    { label: '中', value: 'lg' },
+                    { label: '大', value: 'xl' },
+                    { label: '特大', value: '2xl' }
+                  ], '文字大小 (Font Size)')}
                 </div>
 
                 {/* Raw Style Editor */}
@@ -445,6 +502,7 @@ export default function IframeDemoPage() {
         <div className='flex-1 bg-gray-50 p-6'>
           <div className='h-full bg-white rounded-lg shadow-xl overflow-hidden'>
             <iframe
+              ref={iframeRef}
               src={window.location.origin}
               className='w-full h-full'
               title='设计模式 Iframe 演示'

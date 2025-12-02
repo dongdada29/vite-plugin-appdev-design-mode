@@ -11,6 +11,7 @@ export interface ElementInfo {
   className: string;
   textContent: string;
   sourceInfo: SourceInfo;
+  isStaticText: boolean;
 }
 
 // 消息验证相关类型
@@ -127,29 +128,35 @@ export interface BatchUpdateMessage {
   timestamp?: number;
 }
 
-// 新增：状态查询和响应消息
-export interface GetElementStateMessage {
-  type: 'GET_ELEMENT_STATE';
+// Add to Chat Message
+export interface AddToChatMessage {
+  type: 'ADD_TO_CHAT';
   payload: {
-    sourceInfo: SourceInfo;
+    content: string;
+    context?: {
+      elementInfo?: ElementInfo;
+      sourceInfo?: SourceInfo;
+    };
   };
-  requestId?: string; // Made optional for sender
-  timestamp?: number; // Made optional for sender
+  requestId?: string;
+  timestamp?: number;
 }
 
-export interface ElementStateResponseMessage {
-  type: 'ELEMENT_STATE_RESPONSE';
+// Copy Element Message
+export interface CopyElementMessage {
+  type: 'COPY_ELEMENT';
   payload: {
-    sourceInfo: SourceInfo;
-    elementInfo: ElementInfo;
-    modifications: Array<{
-      type: 'style' | 'content';
-      oldValue: string;
-      newValue: string;
-      timestamp: number;
-    }>;
+    elementInfo: {
+      tagName: string;
+      className: string;
+      content: string;
+      sourceInfo?: SourceInfo;
+    };
+    textContent: string; // 用于剪贴板的 JSON 字符串
+    success: boolean; // 是否拷贝成功
+    error?: string; // 如果失败，错误信息
   };
-  requestId: string; // Response MUST have requestId to match request
+  requestId?: string;
   timestamp?: number;
 }
 
@@ -216,19 +223,19 @@ export type IframeToParentMessage =
   | ContentUpdatedMessage
   | StyleUpdatedMessage
   | DesignModeChangedMessage
-  | ElementStateResponseMessage
   | ErrorMessage
   | AcknowledgementMessage
   | HeartbeatMessage
   | HealthCheckResponseMessage
-  | BridgeReadyMessage;
+  | BridgeReadyMessage
+  | AddToChatMessage
+  | CopyElementMessage;
 
 export type ParentToIframeMessage =
   | ToggleDesignModeMessage
   | UpdateStyleMessage
   | UpdateContentMessage
   | BatchUpdateMessage
-  | GetElementStateMessage
   | HealthCheckMessage
   | HeartbeatMessage; // Added HeartbeatMessage here too for bidirectional support
 
