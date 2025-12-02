@@ -144,7 +144,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
     config(config, { command }) {
       // 保存当前命令，用于后续判断
       currentCommand = command;
-      
+
       // 保存 base 配置，确保路径正确
       basePath = config.base || '/';
       // 规范化 base 路径：确保以 / 开头和结尾（除非是根路径）
@@ -162,28 +162,28 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
       // 获取项目根目录（Vite 默认是 process.cwd()）
       const projectRoot = config.root ?? process.cwd();
-      
+
       // 合并用户已有的 fs.allow 配置
       const existingAllow = config.server?.fs?.allow || [];
       const pluginDistPath = resolve(__dirname, '..');
-      
+
       // 构建允许访问的目录列表（使用 Set 自动去重）
       const allowedPaths = new Set<string>();
-      
+
       // 添加用户已有的配置（保留用户自定义的路径）
       existingAllow.forEach((path: string) => {
         // 规范化路径，确保使用绝对路径
         const normalizedPath = resolve(path);
         allowedPaths.add(normalizedPath);
       });
-      
+
       // 添加项目根目录（必需，用于访问项目源码）
       allowedPaths.add(resolve(projectRoot));
-      
+
       // 添加 node_modules 目录（通常也需要访问）
       const nodeModulesPath = resolve(projectRoot, 'node_modules');
       allowedPaths.add(nodeModulesPath);
-      
+
       // 添加插件的 dist 目录（用于加载客户端代码）
       allowedPaths.add(pluginDistPath);
 
@@ -194,6 +194,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         },
         esbuild: {
           logOverride: { 'this-is-undefined-in-esm': 'silent' },
+          jsx: 'automatic', // Ensure JSX automatic mode for all projects
+          jsxDev: false,    // Disable dev mode for better performance
         },
         optimizeDeps: {
           // 确保 React 和 ReactDOM 被正确预构建
@@ -320,6 +322,20 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
           loader: 'tsx',
           jsx: 'automatic',
           // 确保 React 和 ReactDOM 被正确解析
+          format: 'esm',
+        });
+        return result.code;
+      }
+
+      // 处理插件自己的客户端代码文件
+      // 这样可以防止用户项目的 @vitejs/plugin-react 处理这些文件
+      // 避免 babel-plugin 依赖冲突（特别是在 pnpm 项目中）
+      const pluginDistPath = resolve(__dirname, '..');
+      if (id.startsWith(pluginDistPath) && (id.endsWith('.tsx') || id.endsWith('.ts'))) {
+        const { transformWithEsbuild } = await import('vite');
+        const result = await transformWithEsbuild(code, id, {
+          loader: id.endsWith('.tsx') ? 'tsx' : 'ts',
+          jsx: 'automatic',
           format: 'esm',
         });
         return result.code;
