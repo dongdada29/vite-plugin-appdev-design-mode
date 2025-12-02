@@ -56,7 +56,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* 演示区域 */}
+2
       <div className="bg-white rounded-xl shadow-xl p-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-6">立即体验22232</h2>
         <div className="space-y-4">
@@ -68,7 +68,7 @@ export default function HomePage() {
           </div>
 
           <div className="p-6 bg-green-50 rounded-lg border-2 border-green-200">
-            <h3 className="text-xl font-semibold text-green-900 mb-2 bg-blue-100">另一个卡片</h3>
+源码更新 1
             <p className="text-green-700">
               你可以修改背景、文字颜色、内边距等等。
             </p>
