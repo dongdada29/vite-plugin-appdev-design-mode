@@ -859,7 +859,7 @@ async function checkForStaticText(
         // Note: Babel line numbers are 1-based, columns are 0-based
         if (
           node.loc.start.line === lineNumber &&
-          node.loc.start.column === columnNumber
+          (node.loc.start.column === columnNumber || node.loc.start.column === columnNumber - 1)
         ) {
           found = true;
           const element = path.parent; // JSXElement
