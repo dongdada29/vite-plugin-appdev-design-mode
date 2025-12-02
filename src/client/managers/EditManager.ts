@@ -40,7 +40,7 @@ export class EditManager {
         const data = await response.json();
         if (!data.elementState?.isStaticText) {
           console.warn('[EditManager] Cannot edit non-static text element');
-          alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
+          // alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
           return;
         }
       }

@@ -16,52 +16,59 @@ export function createServerMiddleware(
     try {
       switch (url.pathname) {
         // 现有端点
-        case '/__appdev_design_mode/get-source':
+        case '/get-source':
           await handleGetSource(url, res, rootDir);
           break;
-        case '/__appdev_design_mode/modify-source':
+        case '/modify-source':
           await handleModifySource(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/health':
+        case '/health':
           await handleHealthCheck(res);
           break;
 
         // 新增端点
-        case '/__appdev_design_mode/update':
+        case '/update':
           await handleUpdate(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/batch-update':
+        case '/batch-update':
           await handleBatchUpdate(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/get-element-state':
+        case '/get-element-state':
           await handleGetElementState(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/batch-update-status':
+        case '/batch-update-status':
           await handleBatchUpdateStatus(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/undo':
+        case '/undo':
           await handleUndo(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/redo':
+        case '/redo':
           await handleRedo(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/get-history':
+        case '/get-history':
           await handleGetHistory(req, res, rootDir);
           break;
-        case '/__appdev_design_mode/validate-update':
+        case '/validate-update':
           await handleValidateUpdate(req, res, rootDir);
           break;
 
         default:
           res.statusCode = 404;
           res.end(JSON.stringify({
-            error: 'Not found', availableEndpoints: [
-              '/__appdev_design_mode/get-source',
-              '/__appdev_design_mode/modify-source',
-              '/__appdev_design_mode/update',
-              '/__appdev_design_mode/batch-update',
-              '/__appdev_design_mode/get-element-state',
-              '/__appdev_design_mode/health'
+            error: 'Not found',
+            requestedPath: url.pathname,
+            availableEndpoints: [
+              '/get-source',
+              '/modify-source',
+              '/update',
+              '/batch-update',
+              '/get-element-state',
+              '/batch-update-status',
+              '/undo',
+              '/redo',
+              '/get-history',
+              '/validate-update',
+              '/health'
             ]
           }));
       }

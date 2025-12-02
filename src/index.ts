@@ -1,8 +1,7 @@
 import type { Plugin } from 'vite';
 import { createServerMiddleware } from './core/serverMiddleware';
 import { transformSourceCode } from './core/astTransformer';
-import { handleUpdate } from './core/codeUpdater';
-import { handleBatchUpdate } from './core/batchUpdater';
+
 
 export interface DesignModeOptions {
   /**
@@ -151,7 +150,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         return;
       }
 
-      // Register update middleware
+      // Register client code middleware
       server.middlewares.use(async (req, res, next) => {
         // 匹配客户端代码请求（支持带或不带 base 路径）
         // Vite 的中间件 URL 可能已经处理了 base 路径，所以使用灵活的匹配
@@ -194,17 +193,10 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
           return;
         }
 
-        // Register update middleware
-        if (req.url === '/__appdev_design_mode/update') {
-          handleUpdate(req, res, server.config.root);
-        } else if (req.url === '/__appdev_design_mode/batch-update') {
-          handleBatchUpdate(req, res, server.config.root);
-        } else {
-          next();
-        }
+        next();
       });
 
-      // Then register the base middleware
+      // Register the main API middleware - this handles all /__appdev_design_mode/* endpoints
       server.middlewares.use(
         '/__appdev_design_mode',
         createServerMiddleware(options, server.config.root)
