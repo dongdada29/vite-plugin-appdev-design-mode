@@ -17,7 +17,7 @@
     "README.md"
   ],
   "bin": {
-    "@xagi/vite-plugin-design-mode": "./dist/cli/index.js"
+    "vite-plugin-design-mode": "dist/cli/index.js"
   },
   "keywords": [
     "vite",
