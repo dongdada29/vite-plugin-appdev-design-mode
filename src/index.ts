@@ -37,6 +37,18 @@ export interface DesignModeOptions {
    * 包含的文件模式
    */
   include?: string[];
+
+  /**
+   * 是否启用备份功能
+   * @default false
+   */
+  enableBackup?: boolean;
+
+  /**
+   * 是否启用历史记录功能
+   * @default false
+   */
+  enableHistory?: boolean;
 }
 
 const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
@@ -46,6 +58,8 @@ const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
   verbose: true,
   exclude: ['node_modules', 'dist'],
   include: ['src/**/*.{ts,js,tsx,jsx}'],
+  enableBackup: false,
+  enableHistory: false,
 };
 
 import { fileURLToPath } from 'url';
