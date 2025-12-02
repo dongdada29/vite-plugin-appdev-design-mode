@@ -2,9 +2,6 @@ import type { ViteDevServer } from 'vite';
 import type { DesignModeOptions } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as babel from '@babel/standalone';
-import traverse from '@babel/traverse';
-import * as t from '@babel/types';
 
 export function createServerMiddleware(
   options: Required<DesignModeOptions>,
@@ -33,9 +30,6 @@ export function createServerMiddleware(
         case '/batch-update':
           await handleBatchUpdate(req, res, rootDir);
           break;
-        case '/get-element-state':
-          await handleGetElementState(req, res, rootDir);
-          break;
         case '/batch-update-status':
           await handleBatchUpdateStatus(req, res, rootDir);
           break;
@@ -62,7 +56,6 @@ export function createServerMiddleware(
               '/modify-source',
               '/update',
               '/batch-update',
-              '/get-element-state',
               '/batch-update-status',
               '/undo',
               '/redo',
@@ -482,77 +475,6 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string) {
 }
 
 /**
- * 获取元素状态
- */
-async function handleGetElementState(req: any, res: any, rootDir: string) {
-  if (req.method !== 'POST') {
-    res.statusCode = 405;
-    res.end(JSON.stringify({ error: 'Method not allowed' }));
-    return;
-  }
-
-  let body = '';
-  req.on('data', (chunk: any) => {
-    body += chunk.toString();
-  });
-
-  req.on('end', async () => {
-    try {
-      const { sourceInfo } = JSON.parse(body);
-
-      if (!sourceInfo || !sourceInfo.fileName) {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ error: 'Missing sourceInfo' }));
-        return;
-      }
-
-      const filePath = path.resolve(rootDir, sourceInfo.fileName);
-
-      // 检查文件是否存在
-      try {
-        await fs.promises.access(filePath, fs.constants.F_OK);
-      } catch {
-        res.statusCode = 404;
-        res.end(JSON.stringify({ error: 'Source file not found', filePath }));
-        return;
-      }
-
-      const fileContent = await fs.promises.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
-      const targetLine = Math.max(0, (sourceInfo.lineNumber || 1) - 1);
-
-      const elementState = {
-        sourceInfo,
-        currentContent: lines[targetLine] || '',
-        fileExists: true,
-        fileSize: fileContent.length,
-        lastModified: (await fs.promises.stat(filePath)).mtime.getTime(),
-        hasModifications: await checkForModifications(filePath),
-        context: {
-          before: lines[Math.max(0, targetLine - 2)] || '',
-          current: lines[targetLine] || '',
-          after: lines[Math.min(lines.length - 1, targetLine + 2)] || ''
-        },
-        isStaticText: await checkForStaticText(filePath, sourceInfo.lineNumber, sourceInfo.columnNumber)
-      };
-
-      res.statusCode = 200;
-      res.end(JSON.stringify({
-        success: true,
-        elementState
-      }));
-    } catch (error) {
-      res.statusCode = 500;
-      res.end(
-        JSON.stringify({
-          error: error instanceof Error ? error.message : 'Unknown error'
-        })
-      );
-    }
-  });
-}
-
-/**
  * 批量更新状态查询
  */
 async function handleBatchUpdateStatus(req: any, res: any, rootDir: string) {
@@ -816,78 +738,6 @@ async function smartReplaceInSource(
   } catch (error) {
     console.error('[DesignMode] Smart replace failed:', error);
     return line; // Fallback to original line
-  }
-}
-
-/**
- * Check if the element at the given position contains only static text
- */
-async function checkForStaticText(
-  filePath: string,
-  lineNumber: number,
-  columnNumber: number
-): Promise<boolean> {
-  try {
-    const code = await fs.promises.readFile(filePath, 'utf-8');
-
-    // Parse the code
-    const ast = babel.transform(code, {
-      ast: true,
-      code: false,
-      filename: filePath,
-      presets: ['@babel/preset-typescript', '@babel/preset-react'],
-      parserOpts: {
-        plugins: ['typescript', 'jsx', 'classProperties'],
-        sourceType: 'module'
-      }
-    }).ast;
-
-    if (!ast) return false;
-
-    let isStatic = false;
-    let found = false;
-
-    // Traverse AST to find the element
-    traverse(ast, {
-      JSXOpeningElement(path: any) {
-        if (found) return;
-
-        const node = path.node;
-        if (!node.loc) return;
-
-        // Check if this is the target element
-        // Note: Babel line numbers are 1-based, columns are 0-based
-        if (
-          node.loc.start.line === lineNumber &&
-          (node.loc.start.column === columnNumber || node.loc.start.column === columnNumber - 1)
-        ) {
-          found = true;
-          const element = path.parent; // JSXElement
-
-          if (t.isJSXElement(element)) {
-            // Check children
-            isStatic = element.children.every(child => {
-              // Allow plain text
-              if (t.isJSXText(child)) return true;
-
-              // Allow expression containers with literals
-              if (t.isJSXExpressionContainer(child)) {
-                const expr = child.expression;
-                return t.isStringLiteral(expr) || t.isNumericLiteral(expr);
-              }
-
-              // Disallow everything else (nested elements, variables, function calls, etc.)
-              return false;
-            });
-          }
-        }
-      }
-    });
-
-    return found && isStatic;
-  } catch (error) {
-    console.error('[DesignMode] Static text check failed:', error);
-    return false; // Fail safe
   }
 }
 

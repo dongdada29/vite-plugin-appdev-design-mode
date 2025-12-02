@@ -142,33 +142,6 @@ export interface AddToChatMessage {
   timestamp?: number;
 }
 
-// 新增：状态查询和响应消息
-export interface GetElementStateMessage {
-  type: 'GET_ELEMENT_STATE';
-  payload: {
-    sourceInfo: SourceInfo;
-  };
-  requestId?: string; // Made optional for sender
-  timestamp?: number; // Made optional for sender
-}
-
-export interface ElementStateResponseMessage {
-  type: 'ELEMENT_STATE_RESPONSE';
-  payload: {
-    sourceInfo: SourceInfo;
-    elementInfo: ElementInfo;
-    modifications: Array<{
-      type: 'style' | 'content';
-      oldValue: string;
-      newValue: string;
-      timestamp: number;
-    }>;
-    isStaticText?: boolean;
-  };
-  requestId: string; // Response MUST have requestId to match request
-  timestamp?: number;
-}
-
 // 新增：错误处理消息
 export interface ErrorMessage {
   type: 'ERROR';
@@ -232,7 +205,6 @@ export type IframeToParentMessage =
   | ContentUpdatedMessage
   | StyleUpdatedMessage
   | DesignModeChangedMessage
-  | ElementStateResponseMessage
   | ErrorMessage
   | AcknowledgementMessage
   | HeartbeatMessage
@@ -245,7 +217,6 @@ export type ParentToIframeMessage =
   | UpdateStyleMessage
   | UpdateContentMessage
   | BatchUpdateMessage
-  | GetElementStateMessage
   | HealthCheckMessage
   | HeartbeatMessage; // Added HeartbeatMessage here too for bidirectional support
 
