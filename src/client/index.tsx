@@ -1,4 +1,4 @@
-import React from 'react';
+import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { DesignModeProvider } from './DesignModeContext';
 import { DesignModeManager } from './DesignModeManager';
@@ -18,12 +18,12 @@ const init = () => {
   shadowRoot.appendChild(rootElement);
 
   ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
+    <StrictMode>
       <DesignModeProvider>
         <DesignModeManager />
         {!isInIframe() && <DesignModeUI />}
       </DesignModeProvider>
-    </React.StrictMode>
+    </StrictMode>
   );
 };
 
