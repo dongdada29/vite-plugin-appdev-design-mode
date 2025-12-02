@@ -6,6 +6,22 @@
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>设计模式演示</title>
+<!-- DEV-INJECT-START -->
+  <script data-id="dev-inject-monitor">
+    (function() {
+      const remote = "/sdk/dev-monitor.js";
+      const separator = remote.includes('?') ? '&' : '?';
+      const script = document.createElement('script');
+      script.src = remote + separator + 't=' + Date.now();
+      script.dataset.id = 'dev-inject-monitor-script';
+      script.defer = true;
+      // 防止重复注入
+      if (!document.querySelector('[data-id="dev-inject-monitor-script"]')) {
+        document.head.appendChild(script);
+      }
+    })();
+  </script>
+<!-- DEV-INJECT-END -->
 </head>
 
 <body>
