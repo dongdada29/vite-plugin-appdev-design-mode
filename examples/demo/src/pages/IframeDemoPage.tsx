@@ -1,7 +1,7 @@
 import React from '../react';
 import { useState, useEffect } from 'react';
 import type { ElementInfo } from '@/types/messages';
-import { log } from 'console';
+
 
 // 确保React在所有情况下都可用
 if (typeof React === 'undefined') {
@@ -347,7 +347,7 @@ export default function IframeDemoPage() {
   };
 
   return (
-    <div className='min-h-screen bg-gray-100'>
+    <div className='min-h-screen bg-gray-100' data-selection-exclude="true">
       {/* Top Control Bar */}
       <div className='bg-white border-b border-gray-200 px-6 py-4'>
         <div className='flex items-center justify-between'>
