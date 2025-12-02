@@ -8,7 +8,7 @@ export class EditManager {
   constructor(
     private processUpdate: (update: UpdateState) => Promise<UpdateResult>,
     private config: UpdateManagerConfig
-  ) {}
+  ) { }
 
   /**
    * Handle direct edit (double click or mutation)
@@ -181,7 +181,7 @@ export class EditManager {
    * Edit style (trigger UI)
    */
   public editStyle(element: HTMLElement) {
-    console.log('[EditManager] Opening style editor for:', element);
+    // console.log('[EditManager] Opening style editor for:', element);
     // This is where we would trigger the UI
     // For now, we can just log it or maybe trigger a class update if we had a UI
   }

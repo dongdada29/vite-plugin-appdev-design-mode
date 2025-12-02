@@ -56,6 +56,10 @@ import { existsSync, readFileSync } from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// 虚拟模块 ID，用于在 Vite 中加载客户端代码
+const VIRTUAL_CLIENT_MODULE_ID = 'virtual:appdev-design-mode-client';
+const RESOLVED_VIRTUAL_CLIENT_MODULE_ID = '\0' + VIRTUAL_CLIENT_MODULE_ID + '.tsx';
+
 function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
   // 保存 base 配置，用于构建正确的客户端代码路径
@@ -64,6 +68,42 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
   return {
     name: '@xagi/vite-plugin-design-mode',
     enforce: 'pre',
+
+    // 解析虚拟模块 ID
+    resolveId(id) {
+      if (id === VIRTUAL_CLIENT_MODULE_ID) {
+        return RESOLVED_VIRTUAL_CLIENT_MODULE_ID;
+      }
+      return null;
+    },
+
+    // 加载虚拟模块内容
+    load(id) {
+      if (id === RESOLVED_VIRTUAL_CLIENT_MODULE_ID) {
+        const clientEntryPath = resolveClientEntryPath();
+        if (!existsSync(clientEntryPath)) {
+          throw new Error(
+            `[appdev-design-mode] 客户端入口文件不存在: ${clientEntryPath}`
+          );
+        }
+        // 读取文件内容并重写相对导入为绝对路径
+        // 这样虚拟模块可以正确解析依赖
+        const code = readFileSync(clientEntryPath, 'utf-8');
+        const clientDir = dirname(clientEntryPath);
+
+        // 重写相对导入为绝对路径 imports
+        const rewrittenCode = code.replace(
+          /from ['"]\.\/([^'"]+)['"]/g,
+          (match, moduleName) => {
+            const absolutePath = resolve(clientDir, moduleName);
+            return `from '${absolutePath}'`;
+          }
+        );
+
+        return rewrittenCode;
+      }
+      return null;
+    },
 
     config(config, { command }) {
       // 保存 base 配置，确保路径正确
@@ -113,6 +153,48 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
       // Register update middleware
       server.middlewares.use(async (req, res, next) => {
+        // 匹配客户端代码请求（支持带或不带 base 路径）
+        // Vite 的中间件 URL 可能已经处理了 base 路径，所以使用灵活的匹配
+        const url = req.url || '';
+        const isClientRequest =
+          url === '/@appdev-design-mode/client.js' ||
+          url.endsWith('/@appdev-design-mode/client.js') ||
+          url.includes('@appdev-design-mode/client.js');
+
+        if (isClientRequest) {
+          try {
+            // 使用虚拟模块 ID 来加载已打包的客户端代码
+            // 虚拟模块的 load hook 会使用 esbuild 打包所有依赖
+            const result = await server.transformRequest(
+              VIRTUAL_CLIENT_MODULE_ID,
+              { ssr: false }
+            );
+
+            if (result && result.code) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/javascript');
+              res.setHeader('Cache-Control', 'no-cache');
+              res.end(result.code);
+            } else {
+              throw new Error('transformRequest returned no code');
+            }
+          } catch (error: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'text/plain');
+            res.end(
+              `[appdev-design-mode] 加载客户端代码失败: ${error.message}`
+            );
+            if (options.verbose) {
+              console.error(
+                '[appdev-design-mode] 客户端代码加载错误:',
+                error
+              );
+            }
+          }
+          return;
+        }
+
+        // Register update middleware
         if (req.url === '/__appdev_design_mode/update') {
           handleUpdate(req, res, server.config.root);
         } else if (req.url === '/__appdev_design_mode/batch-update') {
@@ -132,11 +214,12 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
     transformIndexHtml(html, ctx) {
       if (!options.enabled) return html;
 
-      // 构建使用 @fs 协议的客户端代码 URL
-      // @fs 允许访问文件系统中的任意文件
-      const clientEntryPath = resolveClientEntryPath();
-      const clientScriptPath = `/@fs/${clientEntryPath}`;
+      // 构建基于 base 路径的客户端代码 URL
+      // 确保路径相对于 base 配置，支持子路径部署
+      const clientScriptPath = `${basePath}@appdev-design-mode/client.js`.replace(/\/+/g, '/');
 
+      // 使用 HTTP 端点来加载客户端代码，而不是虚拟模块或 /@fs 协议
+      // 这样可以避免 node_modules 访问限制和 CORS 问题
       return {
         html,
         tags: [
@@ -152,9 +235,19 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       };
     },
 
-    transform(code, id, transformOptions) {
+    async transform(code, id, transformOptions) {
       if (!options.enabled) {
         return code;
+      }
+
+      // 特殊处理虚拟模块：使用 transformWithEsbuild 转换 JSX
+      if (id === RESOLVED_VIRTUAL_CLIENT_MODULE_ID) {
+        const { transformWithEsbuild } = await import('vite');
+        const result = await transformWithEsbuild(code, id, {
+          loader: 'tsx',
+          jsx: 'automatic',
+        });
+        return result.code;
       }
 
       // 检查文件是否应该被处理
