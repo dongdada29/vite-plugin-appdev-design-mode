@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback, useRef } from 'react';
 import { useDesignMode } from './DesignModeContext';
 import { ElementInfo, SourceInfo } from '../types/messages';
+import { AttributeNames, isSourceMappingAttribute } from './utils/attributeNames';
 
 /**
  * 元素选择管理器
@@ -347,7 +348,7 @@ export class SelectionManager {
       tagName: element.tagName.toLowerCase(),
       className: element.className || '',
       // Only return text content if element is marked as static content
-      textContent: element.hasAttribute('data-static-content') ? this.getElementTextContent(element) : '',
+      textContent: element.hasAttribute(AttributeNames.staticContent) ? this.getElementTextContent(element) : '',
       sourceInfo,
     };
   }
@@ -356,8 +357,8 @@ export class SelectionManager {
    * 提取元素的源码信息
    */
   private extractSourceInfo(element: HTMLElement): SourceInfo | null {
-    // 优先尝试从 data-source-info JSON 属性获取
-    const sourceInfoStr = element.getAttribute('data-source-info');
+    // 优先尝试从 info JSON 属性获取
+    const sourceInfoStr = element.getAttribute(AttributeNames.info);
     if (sourceInfoStr) {
       try {
         const sourceInfo = JSON.parse(sourceInfoStr);
@@ -372,9 +373,9 @@ export class SelectionManager {
     }
 
     // 备用方案：从个别属性获取
-    const fileName = element.getAttribute('data-source-file');
-    const lineStr = element.getAttribute('data-source-line');
-    const columnStr = element.getAttribute('data-source-column');
+    const fileName = element.getAttribute(AttributeNames.file);
+    const lineStr = element.getAttribute(AttributeNames.line);
+    const columnStr = element.getAttribute(AttributeNames.column);
 
     if (fileName && lineStr && columnStr) {
       return {
@@ -410,7 +411,8 @@ export class SelectionManager {
     const elementAttributes = Array.from(element.attributes);
 
     elementAttributes.forEach(attr => {
-      if (!attr.name.startsWith('data-source-') &&
+      // 过滤掉源码映射属性和选择相关的属性
+      if (!isSourceMappingAttribute(attr.name) &&
         !attr.name.startsWith('data-selection-')) {
         attributes[attr.name] = attr.value;
       }

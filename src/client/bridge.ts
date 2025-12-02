@@ -262,7 +262,7 @@ export class EnhancedBridge implements BridgeInterface {
       'HEARTBEAT', 'HEALTH_CHECK_RESPONSE', 'BRIDGE_READY',
       // Parent to Iframe
       'TOGGLE_DESIGN_MODE', 'UPDATE_STYLE', 'UPDATE_CONTENT', 'BATCH_UPDATE',
-      'GET_ELEMENT_STATE', 'HEALTH_CHECK'
+      'HEALTH_CHECK'
     ];
     return supportedTypes.includes(type);
   }

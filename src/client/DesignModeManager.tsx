@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDesignMode } from './DesignModeContext';
 import { useUpdateManager } from './UpdateManager';
+import { AttributeNames } from './utils/attributeNames';
 
 export const DesignModeManager: React.FC = () => {
   const { isDesignMode, selectElement, selectedElement, updateElementContent } = useDesignMode();
@@ -44,7 +45,7 @@ export const DesignModeManager: React.FC = () => {
       const target = e.target as HTMLElement;
 
       // Check if element is marked as static content
-      if (!target.hasAttribute('data-static-content')) {
+      if (!target.hasAttribute(AttributeNames.staticContent)) {
         // alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
         return;
       }
@@ -68,7 +69,7 @@ export const DesignModeManager: React.FC = () => {
         const newContent = target.innerText;
         if (newContent !== originalContent) {
           // Create a custom version of updateElementContent that uses our saved original
-          const sourceInfoStr = target.getAttribute('data-source-info');
+          const sourceInfoStr = target.getAttribute(AttributeNames.info);
           let filePath: string | null = null;
           let line: number | null = null;
           let column: number | null = null;
@@ -80,7 +81,7 @@ export const DesignModeManager: React.FC = () => {
               line = sourceInfo.lineNumber;
               column = sourceInfo.columnNumber;
             } catch (e) {
-              console.warn('Failed to parse data-source-info:', e);
+              console.warn(`Failed to parse ${AttributeNames.info}:`, e);
             }
           }
 

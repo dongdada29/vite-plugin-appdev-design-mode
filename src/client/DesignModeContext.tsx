@@ -22,6 +22,7 @@ import {
   HealthCheckResponseMessage,
 } from '../types/messages';
 import { bridge, messageValidator } from './bridge';
+import { AttributeNames } from './utils/attributeNames';
 
 export interface Modification {
   id: string;
@@ -85,7 +86,6 @@ interface DesignModeContextType {
     message: T,
     responseType: R['type']
   ) => Promise<R>;
-  getElementState: (sourceInfo: SourceInfo) => Promise<any>;
   healthCheck: () => Promise<any>;
 }
 
@@ -287,7 +287,7 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[data-source-file="${sourceInfo.fileName}"][data-source-line="${sourceInfo.lineNumber}"][data-source-column="${sourceInfo.columnNumber}"]`;
+        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
         console.log(
           '[DesignMode] Looking for element with selector:',
           selector
@@ -302,9 +302,9 @@ export const DesignModeProvider: React.FC<{
             'Selector:',
             selector
           );
-          // 尝试查找所有带有 data-source-file 属性的元素
+          // 尝试查找所有带有 file 属性的元素
           const allElements = document.querySelectorAll(
-            `[data-source-file="${sourceInfo.fileName}"]`
+            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
           );
           console.log(
             '[DesignMode] Found elements with same file:',
@@ -312,9 +312,9 @@ export const DesignModeProvider: React.FC<{
           );
           if (allElements.length > 0) {
             console.log('[DesignMode] First element attributes:', {
-              file: allElements[0].getAttribute('data-source-file'),
-              line: allElements[0].getAttribute('data-source-line'),
-              column: allElements[0].getAttribute('data-source-column'),
+              file: allElements[0].getAttribute(AttributeNames.file),
+              line: allElements[0].getAttribute(AttributeNames.line),
+              column: allElements[0].getAttribute(AttributeNames.column),
             });
           }
 
@@ -443,7 +443,7 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[data-source-file="${sourceInfo.fileName}"][data-source-line="${sourceInfo.lineNumber}"][data-source-column="${sourceInfo.columnNumber}"]`;
+        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
         console.log(
           '[DesignMode] Looking for element with selector:',
           selector
@@ -458,9 +458,9 @@ export const DesignModeProvider: React.FC<{
             'Selector:',
             selector
           );
-          // 尝试查找所有带有 data-source-file 属性的元素
+          // 尝试查找所有带有 file 属性的元素
           const allElements = document.querySelectorAll(
-            `[data-source-file="${sourceInfo.fileName}"]`
+            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
           );
           console.log(
             '[DesignMode] Found elements with same file:',
@@ -468,9 +468,9 @@ export const DesignModeProvider: React.FC<{
           );
           if (allElements.length > 0) {
             console.log('[DesignMode] First element attributes:', {
-              file: allElements[0].getAttribute('data-source-file'),
-              line: allElements[0].getAttribute('data-source-line'),
-              column: allElements[0].getAttribute('data-source-column'),
+              file: allElements[0].getAttribute(AttributeNames.file),
+              line: allElements[0].getAttribute(AttributeNames.line),
+              column: allElements[0].getAttribute(AttributeNames.column),
             });
           }
 
@@ -484,35 +484,6 @@ export const DesignModeProvider: React.FC<{
             timestamp: Date.now(),
           });
           return;
-        }
-
-        // Check if it's pure static text (using server-side AST check)
-        try {
-          const response = await fetch('/__appdev_design_mode/get-element-state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sourceInfo }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (!data.elementState?.isStaticText) {
-              console.warn('[DesignMode] Cannot update content of non-static text element (AST check)');
-              sendToParent({
-                type: 'ERROR',
-                payload: {
-                  code: 'CONTENT_UPDATE_FAILED',
-                  message: 'Cannot update content of dynamic/complex element',
-                  details: { sourceInfo },
-                },
-                timestamp: Date.now(),
-              });
-              return;
-            }
-          }
-        } catch (error) {
-          console.error('[DesignMode] Failed to check if element is static text:', error);
-          // Continue anyway - fail open
         }
 
         const originalContent = element.innerText || element.textContent || '';
@@ -686,7 +657,7 @@ export const DesignModeProvider: React.FC<{
    */
   const findElementBySourceInfo = useCallback(
     (sourceInfo: SourceInfo): HTMLElement | null => {
-      const selector = `[data-source-file="${sourceInfo.fileName}"][data-source-line="${sourceInfo.lineNumber}"][data-source-column="${sourceInfo.columnNumber}"]`;
+      const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
       return document.querySelector(selector) as HTMLElement;
     },
     []
@@ -701,33 +672,15 @@ export const DesignModeProvider: React.FC<{
 
       // 发送选择信息到父窗口（仅在iframe环境下）
       if (element && config.iframeMode?.enabled) {
-        const sourceInfoStr = element.getAttribute('data-source-info');
+        const sourceInfoStr = element.getAttribute(AttributeNames.info);
         if (sourceInfoStr) {
           try {
             const sourceInfo = JSON.parse(sourceInfoStr);
-
-            // Check if element has static text
-            let isStaticText = false;
-            try {
-              const response = await fetch('/__appdev_design_mode/get-element-state', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sourceInfo }),
-              });
-
-              if (response.ok) {
-                const data = await response.json();
-                isStaticText = data.elementState?.isStaticText || false;
-              }
-            } catch (error) {
-              console.warn('[DesignMode] Failed to check static text:', error);
-            }
 
             const elementInfo: ElementInfo = {
               tagName: element.tagName.toLowerCase(),
               className: element.className,
               textContent: element.innerText || element.textContent || '',
-              isStaticText,
               sourceInfo: {
                 fileName: sourceInfo.fileName,
                 lineNumber: sourceInfo.lineNumber,
@@ -747,7 +700,7 @@ export const DesignModeProvider: React.FC<{
           }
         } else {
           console.warn(
-            '[DesignMode] Element selected but missing data-source-info attribute:',
+            `[DesignMode] Element selected but missing ${AttributeNames.info} attribute:`,
             element
           );
         }
@@ -825,8 +778,8 @@ export const DesignModeProvider: React.FC<{
    */
   const extractSourceInfo = useCallback(
     (element: HTMLElement): SourceInfo | null => {
-      // 优先尝试从 data-source-info JSON 属性获取
-      const sourceInfoStr = element.getAttribute('data-source-info');
+      // 优先尝试从 info JSON 属性获取
+      const sourceInfoStr = element.getAttribute(AttributeNames.info);
       if (sourceInfoStr) {
         try {
           const sourceInfo = JSON.parse(sourceInfoStr);
@@ -836,14 +789,14 @@ export const DesignModeProvider: React.FC<{
             columnNumber: sourceInfo.columnNumber,
           };
         } catch (e) {
-          console.warn('Failed to parse data-source-info:', e);
+          console.warn(`Failed to parse ${AttributeNames.info}:`, e);
         }
       }
 
       // 备用方案：逐个属性获取
-      const fileName = element.getAttribute('data-source-file');
-      const lineStr = element.getAttribute('data-source-line');
-      const columnStr = element.getAttribute('data-source-column');
+      const fileName = element.getAttribute(AttributeNames.file);
+      const lineStr = element.getAttribute(AttributeNames.line);
+      const columnStr = element.getAttribute(AttributeNames.column);
 
       if (fileName && lineStr && columnStr) {
         return {
@@ -909,28 +862,6 @@ export const DesignModeProvider: React.FC<{
   const updateElementContent = useCallback(
     async (element: HTMLElement, newContent: string) => {
       const sourceInfo = extractSourceInfo(element);
-      if (sourceInfo) {
-        // Check if it's pure static text (using server-side AST check)
-        try {
-          const response = await fetch('/__appdev_design_mode/get-element-state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sourceInfo }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (!data.elementState?.isStaticText) {
-              console.warn('[DesignMode] Cannot update content of non-static text element (AST check)');
-              return;
-            }
-          }
-        } catch (error) {
-          console.error('[DesignMode] Failed to check if element is static text:', error);
-          // Continue anyway - fail open
-        }
-      }
-
       const originalContent = element.innerText;
 
       console.log('[DesignMode] Updating content:', {
@@ -1091,23 +1022,6 @@ export const DesignModeProvider: React.FC<{
   );
 
   /**
-   * 获取元素状态
-   */
-  const getElementState = useCallback(
-    async (sourceInfo: SourceInfo) => {
-      return await sendMessageWithResponse(
-        {
-          type: 'GET_ELEMENT_STATE',
-          payload: { sourceInfo },
-          timestamp: Date.now(),
-        },
-        'ELEMENT_STATE_RESPONSE'
-      );
-    },
-    [sendMessageWithResponse]
-  );
-
-  /**
    * 健康检查
    */
   const healthCheck = useCallback(async () => {
@@ -1141,7 +1055,6 @@ export const DesignModeProvider: React.FC<{
         // 桥接器方法
         sendMessage,
         sendMessageWithResponse,
-        getElementState,
         healthCheck,
       }}
     >

@@ -8,6 +8,7 @@ import {
   ElementSelectedMessage,
   ElementDeselectedMessage
 } from '../types/messages';
+import { AttributeNames } from './utils/attributeNames';
 
 export const DesignModeBridge: React.FC = () => {
   const { selectedElement, modifyElementClass, updateElementContent } =
@@ -68,9 +69,9 @@ export const DesignModeBridge: React.FC = () => {
     const timer = setTimeout(() => {
       if (selectedElement) {
         // 检查元素的 source 属性
-        const sourceFile = selectedElement.getAttribute('data-source-file');
-        const sourceLine = selectedElement.getAttribute('data-source-line');
-        const sourceColumn = selectedElement.getAttribute('data-source-column');
+        const sourceFile = selectedElement.getAttribute(AttributeNames.file);
+        const sourceLine = selectedElement.getAttribute(AttributeNames.line);
+        const sourceColumn = selectedElement.getAttribute(AttributeNames.column);
 
         console.log('[DesignModeBridge] Selected element attributes:', {
           tagName: selectedElement.tagName,
@@ -138,13 +139,13 @@ export const DesignModeBridge: React.FC = () => {
       if (selectedElement && payload?.sourceInfo && payload?.newClass) {
         // 验证源信息是否匹配
         const elementSourceInfo = {
-          fileName: selectedElement.getAttribute('data-source-file') || '',
+          fileName: selectedElement.getAttribute(AttributeNames.file) || '',
           lineNumber: parseInt(
-            selectedElement.getAttribute('data-source-line') || '0',
+            selectedElement.getAttribute(AttributeNames.line) || '0',
             10
           ),
           columnNumber: parseInt(
-            selectedElement.getAttribute('data-source-column') || '0',
+            selectedElement.getAttribute(AttributeNames.column) || '0',
             10
           ),
         };
@@ -175,13 +176,13 @@ export const DesignModeBridge: React.FC = () => {
       ) {
         // 验证源信息是否匹配
         const elementSourceInfo = {
-          fileName: selectedElement.getAttribute('data-source-file') || '',
+          fileName: selectedElement.getAttribute(AttributeNames.file) || '',
           lineNumber: parseInt(
-            selectedElement.getAttribute('data-source-line') || '0',
+            selectedElement.getAttribute(AttributeNames.line) || '0',
             10
           ),
           columnNumber: parseInt(
-            selectedElement.getAttribute('data-source-column') || '0',
+            selectedElement.getAttribute(AttributeNames.column) || '0',
             10
           ),
         };

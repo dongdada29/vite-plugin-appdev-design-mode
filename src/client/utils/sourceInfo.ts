@@ -1,4 +1,5 @@
 import { SourceInfo } from '../../types/messages';
+import { AttributeNames } from './attributeNames';
 
 /**
  * 检查元素是否有源码映射
@@ -7,8 +8,8 @@ import { SourceInfo } from '../../types/messages';
  */
 export function hasSourceMapping(element: HTMLElement): boolean {
   return !!(
-    element.getAttribute('data-source-file') ||
-    element.getAttribute('data-source-info')
+    element.getAttribute(AttributeNames.file) ||
+    element.getAttribute(AttributeNames.info)
   );
 }
 
@@ -18,20 +19,20 @@ export function hasSourceMapping(element: HTMLElement): boolean {
  * @returns 源码信息对象，如果没有则返回null
  */
 export function extractSourceInfo(element: HTMLElement): SourceInfo | null {
-  // Try to extract from data-source-info attribute
-  const sourceInfoStr = element.getAttribute('data-source-info');
+  // 优先尝试从 info 属性（JSON格式）获取完整信息
+  const sourceInfoStr = element.getAttribute(AttributeNames.info);
   if (sourceInfoStr) {
     try {
       return JSON.parse(sourceInfoStr) as SourceInfo;
     } catch (e) {
-      console.warn('[sourceInfo] Failed to parse data-source-info:', e);
+      console.warn(`[sourceInfo] Failed to parse ${AttributeNames.info}:`, e);
     }
   }
 
-  // Fallback: try to extract from individual attributes
-  const fileName = element.getAttribute('data-source-file');
-  const lineStr = element.getAttribute('data-source-line');
-  const columnStr = element.getAttribute('data-source-column');
+  // 降级方案：尝试从单独的属性提取
+  const fileName = element.getAttribute(AttributeNames.file);
+  const lineStr = element.getAttribute(AttributeNames.line);
+  const columnStr = element.getAttribute(AttributeNames.column);
 
   if (fileName && lineStr) {
     return {

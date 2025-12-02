@@ -28,27 +28,6 @@ export class EditManager {
     const sourceInfo = extractSourceInfo(element);
     if (!sourceInfo) return;
 
-    // Check if element has static text
-    try {
-      const response = await fetch('/__appdev_design_mode/get-element-state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sourceInfo }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (!data.elementState?.isStaticText) {
-          console.warn('[EditManager] Cannot edit non-static text element');
-          // alert('该元素不可编辑：只有纯静态文本可以编辑（不包含变量或表达式）');
-          return;
-        }
-      }
-    } catch (error) {
-      console.error('[EditManager] Failed to check if element is static text:', error);
-      return;
-    }
-
     const originalText = element.innerText;
 
     const textArea = enterEditMode({
