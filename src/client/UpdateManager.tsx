@@ -131,6 +131,11 @@ export class UpdateManager {
     // Only show context menu if design mode is enabled
     if (!this.isDesignMode) return;
 
+    // Exclude context menu
+    if (target.closest('[data-context-menu="true"]')) return;
+
+    // Only show context menu if the target is the currently selected element
+
     // Only show context menu if the target is the currently selected element
     if (!this.selectedElement || target !== this.selectedElement) return;
 

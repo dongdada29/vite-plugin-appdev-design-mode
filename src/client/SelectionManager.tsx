@@ -23,23 +23,23 @@ export class SelectionManager {
       excludeSelectors: string[];
       includeOnlyElements: boolean;
     } = {
-      enableSelection: true,
-      enableHover: true,
-      selectionDelay: 0,
-      excludeSelectors: [
-        'script',
-        'style',
-        'meta',
-        'link',
-        'head',
-        'title',
-        'html',
-        'body',
-        '[data-selection-exclude="true"]',
-        '.no-selection'
-      ],
-      includeOnlyElements: false
-    }
+        enableSelection: true,
+        enableHover: true,
+        selectionDelay: 0,
+        excludeSelectors: [
+          'script',
+          'style',
+          'meta',
+          'link',
+          'head',
+          'title',
+          'html',
+          'body',
+          '[data-selection-exclude="true"]',
+          '.no-selection'
+        ],
+        includeOnlyElements: false
+      }
   ) {
     this.initializeEventListeners();
   }
@@ -54,7 +54,7 @@ export class SelectionManager {
     this.container.addEventListener('click', this.handleClick.bind(this), true);
     this.container.addEventListener('mousedown', this.handleMouseDown.bind(this), true);
     this.container.addEventListener('mouseup', this.handleMouseUp.bind(this), true);
-    
+
     if (this.config.enableHover) {
       this.container.addEventListener('mouseenter', this.handleMouseEnter.bind(this), true);
       this.container.addEventListener('mouseleave', this.handleMouseLeave.bind(this), true);
@@ -179,6 +179,9 @@ export class SelectionManager {
    */
   private isValidElement(element: HTMLElement): boolean {
     if (!element || !element.tagName) return false;
+
+    // Exclude context menu
+    if (element.closest('[data-context-menu="true"]')) return false;
 
     // 检查是否在排除列表中
     for (const selector of this.config.excludeSelectors) {
@@ -406,8 +409,8 @@ export class SelectionManager {
     const elementAttributes = Array.from(element.attributes);
 
     elementAttributes.forEach(attr => {
-      if (!attr.name.startsWith('data-source-') && 
-          !attr.name.startsWith('data-selection-')) {
+      if (!attr.name.startsWith('data-source-') &&
+        !attr.name.startsWith('data-selection-')) {
         attributes[attr.name] = attr.value;
       }
     });
@@ -424,29 +427,29 @@ export class SelectionManager {
 
     while (current && current !== this.container) {
       let selector = current.tagName.toLowerCase();
-      
+
       if (current.id) {
         selector += `#${current.id}`;
         path.unshift(selector);
         break;
       }
-      
+
       if (current.className) {
         const classes = Array.from(current.classList).slice(0, 3); // 只取前3个类名
         selector += `.${classes.join('.')}`;
       }
-      
+
       // 计算兄弟元素索引
       const siblings = Array.from(current.parentNode?.children || []);
-      const sameTagSiblings = siblings.filter(sibling => 
+      const sameTagSiblings = siblings.filter(sibling =>
         sibling.tagName === current!.tagName
       );
-      
+
       if (sameTagSiblings.length > 1) {
         const index = sameTagSiblings.indexOf(current);
         selector += `:nth-of-type(${index + 1})`;
       }
-      
+
       path.unshift(selector);
       current = current.parentElement;
     }

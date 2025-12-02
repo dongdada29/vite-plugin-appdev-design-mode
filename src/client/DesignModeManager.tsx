@@ -36,6 +36,7 @@ export const DesignModeManager: React.FC = () => {
 
     const handleDoubleClick = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
+      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -122,6 +123,7 @@ export const DesignModeManager: React.FC = () => {
 
     const handleMouseOver = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
+      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
 
       const target = e.target as HTMLElement;
       target.setAttribute('data-design-hover', 'true');
