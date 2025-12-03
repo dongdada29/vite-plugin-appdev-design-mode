@@ -1,0 +1,38 @@
+# 排除所有 source map 文件（对用户不必要，减少包体积）
+dist/**/*.map
+dist/**/*.js.map
+dist/**/*.d.ts.map
+*.map
+
+# 排除 TypeScript 源文件（只保留编译后的文件）
+**/*.ts
+**/*.tsx
+!dist/**/*.d.ts
+
+# 排除测试文件
+test/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# 排除开发文件
+src/
+examples/
+scripts/
+*.config.ts
+*.config.js
+tsconfig*.json
+vitest.config.ts
+
+# 排除其他不必要的文件
+.git/
+.gitignore
+.npmignore
+*.log
+.DS_Store
+node_modules/
+coverage/
+.vscode/
+.idea/
+

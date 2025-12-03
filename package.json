@@ -63,7 +63,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc && tsc -p tsconfig.cli.json && node scripts/copy-client.mjs",
+    "build": "vite build && tsc && tsc -p tsconfig.cli.json && node scripts/copy-client.mjs && node scripts/clean-maps.mjs",
+    "publish": "npm run build && npm publish",
     "build:cli": "tsc -p tsconfig.cli.json",
     "test": "vitest",
     "test:run": "vitest run",
