@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { DesignModeProvider } from './DesignModeContext';
 import { DesignModeManager } from './DesignModeManager';
-import { DesignModeUI } from './DesignModeUI';
 
 const init = () => {
   const containerId = '__vite_plugin_design_mode__';
@@ -21,7 +20,6 @@ const init = () => {
     <StrictMode>
       <DesignModeProvider>
         <DesignModeManager />
-        {!isInIframe() && <DesignModeUI />}
       </DesignModeProvider>
     </StrictMode>
   );

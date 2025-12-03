@@ -390,29 +390,29 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 更新源码 - 直接使用 sourceInfo
-        try {
-          const response = await fetch('/__appdev_design_mode/update', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              filePath: sourceInfo.fileName,
-              line: sourceInfo.lineNumber,
-              column: sourceInfo.columnNumber,
-              newValue: newClass,
-              type: 'style',
-              originalValue: oldClass,
-            }),
-          });
+        // try {
+        //   const response = await fetch('/__appdev_design_mode/update', {
+        //     method: 'POST',
+        //     headers: {
+        //       'Content-Type': 'application/json',
+        //     },
+        //     body: JSON.stringify({
+        //       filePath: sourceInfo.fileName,
+        //       line: sourceInfo.lineNumber,
+        //       column: sourceInfo.columnNumber,
+        //       newValue: newClass,
+        //       type: 'style',
+        //       originalValue: oldClass,
+        //     }),
+        //   });
 
-          if (!response.ok) {
-            throw new Error('Failed to update source');
-          }
-        } catch (error) {
-          console.error('[DesignMode] Error updating source:', error);
-          throw error;
-        }
+        //   if (!response.ok) {
+        //     throw new Error('Failed to update source');
+        //   }
+        // } catch (error) {
+        //   console.error('[DesignMode] Error updating source:', error);
+        //   throw error;
+        // }
 
         // 发送更新完成消息
         sendToParent({
@@ -575,35 +575,35 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 只有在 persist 为 true (默认) 时才更新源码
-        if (updateMessage.payload.persist !== false) {
-          // 更新源码 - 使用 extractSourceInfo 获取源码信息
-          const elementSourceInfo = extractSourceInfo(element);
-          if (elementSourceInfo) {
-            try {
-              const response = await fetch('/__appdev_design_mode/update', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  filePath: elementSourceInfo.fileName,
-                  line: elementSourceInfo.lineNumber,
-                  column: elementSourceInfo.columnNumber,
-                  newValue: newContent,
-                  type: 'content',
-                  originalValue: originalContent,
-                }),
-              });
+        // if (updateMessage.payload.persist !== false) {
+        //   // 更新源码 - 使用 extractSourceInfo 获取源码信息
+        //   const elementSourceInfo = extractSourceInfo(element);
+        //   if (elementSourceInfo) {
+        //     try {
+        //       const response = await fetch('/__appdev_design_mode/update', {
+        //         method: 'POST',
+        //         headers: {
+        //           'Content-Type': 'application/json',
+        //         },
+        //         body: JSON.stringify({
+        //           filePath: elementSourceInfo.fileName,
+        //           line: elementSourceInfo.lineNumber,
+        //           column: elementSourceInfo.columnNumber,
+        //           newValue: newContent,
+        //           type: 'content',
+        //           originalValue: originalContent,
+        //         }),
+        //       });
 
-              if (!response.ok) {
-                throw new Error('Failed to update source');
-              }
-            } catch (error) {
-              console.error('[DesignMode] Error updating source:', error);
-              throw error;
-            }
-          }
-        }
+        //       if (!response.ok) {
+        //         throw new Error('Failed to update source');
+        //       }
+        //     } catch (error) {
+        //       console.error('[DesignMode] Error updating source:', error);
+        //       throw error;
+        //     }
+        //   }
+        // }
 
         // 发送更新完成消息
         sendToParent({
