@@ -35,7 +35,7 @@ export default defineConfig({
     // <!-- DEV-INJECT-END -->
 
     react(),
-      appdevDesignMode()
+    appdevDesignMode()
   ],
   resolve: {
     alias: {
