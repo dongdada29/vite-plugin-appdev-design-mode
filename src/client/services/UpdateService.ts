@@ -40,7 +40,6 @@ export class UpdateService {
       if (update.persist) {
         serverResponse = await this.saveToSource(update);
       } else {
-        console.log('[UpdateService] Preview only, skipping save to source');
         serverResponse = { success: true, preview: true };
       }
 

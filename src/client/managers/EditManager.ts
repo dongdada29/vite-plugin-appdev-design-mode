@@ -284,7 +284,7 @@ export class EditManager {
    * Edit attributes (trigger UI)
    */
   public editAttributes(element: HTMLElement) {
-    console.log('[EditManager] Opening attribute editor for:', element);
+    // Opening attribute editor
   }
 
   /**
@@ -320,12 +320,6 @@ export class EditManager {
         },
         timestamp: Date.now(),
       }, '*');
-
-      console.log('[EditManager] Content updated (preview only):', {
-        sourceInfo: finalSourceInfo,
-        old: oldValue,
-        new: newValue
-      });
     }
   }
 

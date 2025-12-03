@@ -219,8 +219,6 @@ export class SelectionManager {
 
     // 通知监听器
     this.selectionListeners.forEach(listener => listener(element));
-
-    console.log('[SelectionManager] Element selected:', element);
   }
 
   /**
@@ -231,7 +229,6 @@ export class SelectionManager {
       this.clearElementHighlighting(this.selectedElement);
       this.selectedElement = null;
       this.selectionListeners.forEach(listener => listener(null));
-      console.log('[SelectionManager] Selection cleared');
     }
   }
 
@@ -289,7 +286,6 @@ export class SelectionManager {
    */
   private onHoverElement(element: HTMLElement | null) {
     // 可以在这里添加悬停效果的逻辑
-    console.log('[SelectionManager] Hover element:', element);
   }
 
   /**

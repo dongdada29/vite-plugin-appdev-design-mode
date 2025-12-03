@@ -21,15 +21,11 @@ export const DesignModeBridge: React.FC = () => {
   const isBridgeReady = useCallback(() => {
     // 检查是否在iframe环境中
     if (window.self === window.top) {
-      console.log(
-        '[DesignModeBridge] Running in main window, skipping bridge connection'
-      );
       return false;
     }
 
     // 检查Bridge是否已连接
     if (!bridge.isConnectedToTarget()) {
-      console.log('[DesignModeBridge] Bridge not ready, skipping message');
       return false;
     }
 
@@ -54,9 +50,8 @@ export const DesignModeBridge: React.FC = () => {
         };
 
         await bridge.send(message as any);
-        console.log('[DesignModeBridge] Message sent:', type, payload);
       } catch (error) {
-        console.warn('[DesignModeBridge] Failed to send message:', error);
+        // Failed to send message
       }
     },
     [isBridgeReady]
@@ -73,18 +68,6 @@ export const DesignModeBridge: React.FC = () => {
         const sourceFile = selectedElement.getAttribute(AttributeNames.file);
         const sourceLine = selectedElement.getAttribute(AttributeNames.line);
         const sourceColumn = selectedElement.getAttribute(AttributeNames.column);
-
-        console.log('[DesignModeBridge] Selected element attributes:', {
-          tagName: selectedElement.tagName,
-          sourceFile,
-          sourceLine,
-          sourceColumn,
-          allAttributes: Array.from(selectedElement.attributes).map(attr => ({
-            name: attr.name,
-            value: attr.value,
-            type: 'attribute'
-          })),
-        });
 
         // 确保我们有有效的元素数据
         // 判断是否为静态文本：
@@ -109,11 +92,6 @@ export const DesignModeBridge: React.FC = () => {
           },
           isStaticText: isStaticText || false, // 默认为 false
         };
-
-        console.log(
-          '[DesignModeBridge] Sending ELEMENT_SELECTED with data:',
-          elementData
-        );
 
         if (
           !elementData.sourceInfo.fileName ||
@@ -143,7 +121,6 @@ export const DesignModeBridge: React.FC = () => {
 
     const unsubscribeStyle = bridge.on<UpdateStyleMessage>('UPDATE_STYLE', (message) => {
       const payload = message.payload;
-      console.log('[DesignModeBridge] Received style update:', payload);
 
       if (selectedElement && payload?.sourceInfo && payload?.newClass) {
         // 验证源信息是否匹配
@@ -176,7 +153,6 @@ export const DesignModeBridge: React.FC = () => {
 
     const unsubscribeContent = bridge.on<UpdateContentMessage>('UPDATE_CONTENT', (message) => {
       const payload = message.payload;
-      console.log('[DesignModeBridge] Received content update:', payload);
 
       if (
         selectedElement &&
@@ -215,7 +191,6 @@ export const DesignModeBridge: React.FC = () => {
     const unsubscribeToggle = bridge.on<ToggleDesignModeMessage>(
       'TOGGLE_DESIGN_MODE',
       (message) => {
-        console.log('[DesignModeBridge] Received design mode toggle:', message);
         // 这里可以添加设计模式切换逻辑
       }
     );
@@ -243,7 +218,7 @@ export const DesignModeBridge: React.FC = () => {
     const checkBridgeHealth = async () => {
       try {
         const health = await bridge.healthCheck();
-        console.log('[DesignModeBridge] Bridge health:', health);
+        console.log('[DesignModeBridge] Bridge health check:', health);
       } catch (error) {
         console.warn('[DesignModeBridge] Bridge health check failed:', error);
       }

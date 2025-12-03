@@ -37,7 +37,6 @@ export async function handleBatchUpdate(req: IncomingMessage, res: ServerRespons
       return;
     }
 
-    console.log(`[appdev-design-mode] Batch update request: ${updates.length} items`);
 
     const results = [];
     let successCount = 0;

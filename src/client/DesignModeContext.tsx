@@ -290,11 +290,6 @@ export const DesignModeProvider: React.FC<{
 
         // 根据 sourceInfo 查找元素
         const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-        console.log(
-          '[DesignMode] Looking for element with selector:',
-          selector
-        );
-        console.log('[DesignMode] SourceInfo:', sourceInfo);
 
         const element = document.querySelector(selector) as HTMLElement;
         if (!element) {
@@ -308,17 +303,6 @@ export const DesignModeProvider: React.FC<{
           const allElements = document.querySelectorAll(
             `[${AttributeNames.file}="${sourceInfo.fileName}"]`
           );
-          console.log(
-            '[DesignMode] Found elements with same file:',
-            allElements.length
-          );
-          if (allElements.length > 0) {
-            console.log('[DesignMode] First element attributes:', {
-              file: allElements[0].getAttribute(AttributeNames.file),
-              line: allElements[0].getAttribute(AttributeNames.line),
-              column: allElements[0].getAttribute(AttributeNames.column),
-            });
-          }
 
           sendToParent({
             type: 'ERROR',
@@ -333,14 +317,6 @@ export const DesignModeProvider: React.FC<{
         }
 
         const oldClass = element.className;
-        console.log(
-          '[DesignMode] Found element:',
-          element,
-          'Old class:',
-          oldClass,
-          'New class:',
-          newClass
-        );
 
         // 查找所有具有相同 element-id 的元素（列表项同步）
         const elementId = element.getAttribute(AttributeNames.elementId);
@@ -356,13 +332,6 @@ export const DesignModeProvider: React.FC<{
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
           });
-          
-          console.log(
-            '[DesignMode] Found',
-            relatedElements.length,
-            'related elements with same element-id:',
-            elementId
-          );
         } else {
           console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
         }
@@ -377,12 +346,6 @@ export const DesignModeProvider: React.FC<{
           }, 0);
         });
 
-        console.log(
-          '[DesignMode] Applied new class to',
-          relatedElements.length,
-          'element(s):',
-          element.className
-        );
 
         // 更新选中的元素状态（如果当前选中的是这个元素）
         if (selectedElement === element) {
@@ -425,7 +388,6 @@ export const DesignModeProvider: React.FC<{
           timestamp: Date.now(),
         });
 
-        console.log('[DesignMode] Style updated from external panel');
       } catch (error) {
         console.error(
           '[DesignMode] Error handling external style update:',
@@ -475,11 +437,6 @@ export const DesignModeProvider: React.FC<{
 
         // 根据 sourceInfo 查找元素
         const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-        console.log(
-          '[DesignMode] Looking for element with selector:',
-          selector
-        );
-        console.log('[DesignMode] SourceInfo:', sourceInfo);
 
         const element = document.querySelector(selector) as HTMLElement;
         if (!element) {
@@ -493,17 +450,6 @@ export const DesignModeProvider: React.FC<{
           const allElements = document.querySelectorAll(
             `[${AttributeNames.file}="${sourceInfo.fileName}"]`
           );
-          console.log(
-            '[DesignMode] Found elements with same file:',
-            allElements.length
-          );
-          if (allElements.length > 0) {
-            console.log('[DesignMode] First element attributes:', {
-              file: allElements[0].getAttribute(AttributeNames.file),
-              line: allElements[0].getAttribute(AttributeNames.line),
-              column: allElements[0].getAttribute(AttributeNames.column),
-            });
-          }
 
           sendToParent({
             type: 'ERROR',
@@ -518,14 +464,6 @@ export const DesignModeProvider: React.FC<{
         }
 
         const originalContent = element.innerText || element.textContent || '';
-        console.log(
-          '[DesignMode] Found element:',
-          element,
-          'Old content:',
-          originalContent,
-          'New content:',
-          newContent
-        );
 
         // 查找所有具有相同 element-id 的元素（列表项同步）
         const elementId = element.getAttribute(AttributeNames.elementId);
@@ -541,13 +479,6 @@ export const DesignModeProvider: React.FC<{
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
           });
-          
-          console.log(
-            '[DesignMode] Found',
-            relatedElements.length,
-            'related elements with same element-id:',
-            elementId
-          );
         } else {
           console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
         }
@@ -562,12 +493,6 @@ export const DesignModeProvider: React.FC<{
           }, 0);
         });
 
-        console.log(
-          '[DesignMode] Applied new content to',
-          relatedElements.length,
-          'element(s)',
-          element.innerText
-        );
 
         // 更新选中的元素状态（如果当前选中的是这个元素）
         if (selectedElement === element) {
@@ -616,7 +541,6 @@ export const DesignModeProvider: React.FC<{
           timestamp: Date.now(),
         });
 
-        console.log('[DesignMode] Content updated from external panel');
       } catch (error) {
         console.error(
           '[DesignMode] Error handling external content update:',
@@ -693,7 +617,6 @@ export const DesignModeProvider: React.FC<{
           })
         );
 
-        console.log('[DesignMode] Batch update completed:', results);
       } catch (error) {
         console.error('[DesignMode] Error handling batch update:', error);
 
@@ -772,7 +695,6 @@ export const DesignModeProvider: React.FC<{
               timestamp: Date.now(),
             });
 
-            console.log('[DesignMode] Sent ELEMENT_SELECTED to parent', elementInfo);
           } catch (e) {
             console.warn('Failed to parse source info:', e);
           }
@@ -840,9 +762,6 @@ export const DesignModeProvider: React.FC<{
           throw new Error('Failed to update source');
         }
 
-        console.log(
-          `[DesignMode] Updated ${type} for ${sourceInfo.fileName}:${sourceInfo.lineNumber}`
-        );
       } catch (error) {
         console.error('[DesignMode] Error updating source:', error);
         throw error;
@@ -942,10 +861,6 @@ export const DesignModeProvider: React.FC<{
       const sourceInfo = extractSourceInfo(element);
       const originalContent = element.innerText;
 
-      console.log('[DesignMode] Updating content:', {
-        original: originalContent,
-        new: newContent,
-      });
 
       // 更新DOM
       element.innerText = newContent;

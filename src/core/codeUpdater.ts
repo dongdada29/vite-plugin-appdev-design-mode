@@ -14,8 +14,6 @@ export interface UpdateRequest {
 export function performUpdate(root: string, data: UpdateRequest): { success: boolean, message: string } {
   const { filePath, newValue, type, originalValue } = data;
 
-  console.log('[appdev-design-mode] Update request:', { filePath, type, newValue: newValue.substring(0, 50) });
-
   // Resolve absolute path
   const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(root, filePath);
 
@@ -38,7 +36,6 @@ export function performUpdate(root: string, data: UpdateRequest): { success: boo
       if (newSourceCode !== sourceCode) {
         fs.writeFileSync(absolutePath, newSourceCode, 'utf-8');
         updated = true;
-        console.log(`[appdev-design-mode] Updated ${path.relative(root, absolutePath)}`);
       } else {
         // Fallback: If original value not found, try to find any similar content
         // This handles cases where the file was already updated by HMR
@@ -46,13 +43,11 @@ export function performUpdate(root: string, data: UpdateRequest): { success: boo
 
         // Try to find the new value in the file (maybe it's already there)
         if (sourceCode.includes(newValue)) {
-          console.log('[appdev-design-mode] Content already exists in file, no update needed');
           updated = true; // Consider it successful since the desired state is already there
         }
       }
     } else if (originalValue === newValue) {
       // No change needed
-      console.log('[appdev-design-mode] No change needed (original === new)');
       updated = true;
     } else {
       console.warn('[appdev-design-mode] Missing originalValue for content update');
@@ -72,10 +67,9 @@ export function performUpdate(root: string, data: UpdateRequest): { success: boo
        if (newSourceCode !== sourceCode) {
          fs.writeFileSync(absolutePath, newSourceCode, 'utf-8');
          updated = true;
-         console.log(`[appdev-design-mode] Updated style in ${path.relative(root, absolutePath)}`);
        }
     } else {
-      console.log('[appdev-design-mode] Style update requires originalValue (current implementation)');
+      // Style update requires originalValue (current implementation)
     }
   }
 

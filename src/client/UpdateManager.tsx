@@ -385,8 +385,6 @@ export class UpdateManager {
         alertMessage += `标签: <${elementInfo.tagName}>\n`;
         alertMessage += `类名: ${elementInfo.className}\n`;
         alertMessage += `内容: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`;
-
-        console.log('[UpdateManager] Copy element:', alertMessage);
         
         // 拷贝成功，发送成功消息
         sendCopyMessage(true);
@@ -398,8 +396,6 @@ export class UpdateManager {
         sendCopyMessage(false, errorMessage);
       });
     } else {
-      console.log('[UpdateManager] Element info:', elementInfo);
-      
       // 浏览器不支持剪贴板 API，发送失败消息
       sendCopyMessage(false, '浏览器不支持剪贴板 API');
     }
@@ -462,15 +458,12 @@ export class UpdateManager {
       alertMessage += `\n`;
     }
     alertMessage += `内容:\n${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`;
-
-    console.log('[UpdateManager] Add to chat:', alertMessage);
   }
 
   /**
    * 删除元素
    */
   private deleteElement(element: HTMLElement) {
-    console.log('[UpdateManager] Deleting element:', element);
     // 这里可以实现删除逻辑，但需要谨慎处理
   }
 
@@ -621,7 +614,6 @@ export class UpdateManager {
 
     try {
       const results = await this.processBatchUpdate(pendingUpdates);
-      console.log('[UpdateManager] All changes saved:', results);
     } catch (error) {
       console.error('[UpdateManager] Failed to save changes:', error);
     }
@@ -638,7 +630,6 @@ export class UpdateManager {
     lastUpdate.element.innerText = lastUpdate.oldValue;
     lastUpdate.element.className = lastUpdate.oldValue;
 
-    console.log('[UpdateManager] Undone update:', lastUpdate.id);
     return true;
   }
 
@@ -653,7 +644,6 @@ export class UpdateManager {
     lastReverted.element.innerText = lastReverted.newValue;
     lastReverted.element.className = lastReverted.newValue;
 
-    console.log('[UpdateManager] Redid update:', lastReverted.id);
     return true;
   }
 
