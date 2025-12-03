@@ -2,7 +2,12 @@ import React, { useEffect, useCallback, useRef } from 'react';
 import { useDesignMode } from './DesignModeContext';
 import { ElementInfo, SourceInfo } from '../types/messages';
 import { AttributeNames, isSourceMappingAttribute } from './utils/attributeNames';
-import { isPureStaticText } from './utils/elementUtils';
+import {
+  highlightElement,
+  clearElementHighlighting,
+  extractElementInfo,
+  isValidElement
+} from './utils/domUtils';
 
 /**
  * 元素选择管理器
@@ -80,7 +85,7 @@ export class SelectionManager {
     }
 
     const target = event.target as HTMLElement;
-    if (!this.isValidElement(target)) return;
+    if (!this.checkIsValidElement(target)) return;
 
     // 应用选择延迟（如果配置了）
     if (this.config.selectionDelay > 0) {
@@ -97,7 +102,7 @@ export class SelectionManager {
    */
   private handleMouseDown(event: MouseEvent) {
     const target = event.target as HTMLElement;
-    if (!this.isValidElement(target)) return;
+    if (!this.checkIsValidElement(target)) return;
 
     this.isSelecting = true;
     this.selectionStartTime = Date.now();
@@ -128,7 +133,7 @@ export class SelectionManager {
     if (!this.config.enableHover) return;
 
     const target = event.target as HTMLElement;
-    if (!this.isValidElement(target)) return;
+    if (!this.checkIsValidElement(target)) return;
 
     this.hoverElement = target;
     this.onHoverElement(target);
@@ -179,17 +184,9 @@ export class SelectionManager {
   /**
    * 检查元素是否有效可选择
    */
-  private isValidElement(element: HTMLElement): boolean {
-    if (!element || !element.tagName) return false;
-
-    // Exclude context menu
-    if (element.closest('[data-context-menu="true"]')) return false;
-
-    // 检查是否在排除列表中
-    for (const selector of this.config.excludeSelectors) {
-      if (element.matches(selector) || element.closest(selector)) {
-        return false;
-      }
+  private checkIsValidElement(element: HTMLElement): boolean {
+    if (!isValidElement(element, this.config.excludeSelectors)) {
+      return false;
     }
 
     // 如果设置了只包含元素类型限制
@@ -209,13 +206,13 @@ export class SelectionManager {
 
     // 清除之前的选择高亮
     if (this.selectedElement) {
-      this.clearElementHighlighting(this.selectedElement);
+      clearElementHighlighting(this.selectedElement);
     }
 
     this.selectedElement = element;
 
     // 添加新的选择高亮
-    this.highlightElement(element);
+    highlightElement(element);
 
     // 通知监听器
     this.selectionListeners.forEach(listener => listener(element));
@@ -228,59 +225,10 @@ export class SelectionManager {
    */
   public clearSelection() {
     if (this.selectedElement) {
-      this.clearElementHighlighting(this.selectedElement);
+      clearElementHighlighting(this.selectedElement);
       this.selectedElement = null;
       this.selectionListeners.forEach(listener => listener(null));
       console.log('[SelectionManager] Selection cleared');
-    }
-  }
-
-  /**
-   * 高亮显示元素
-   */
-  private highlightElement(element: HTMLElement) {
-    // 移除之前的高亮样式
-    const existingHighlight = element.getAttribute('data-selection-highlight');
-    if (existingHighlight) {
-      const existingStyles = JSON.parse(existingHighlight);
-      Object.entries(existingStyles).forEach(([property, value]) => {
-        (element.style as any)[property] = value;
-      });
-    }
-
-    // 保存原始样式
-    const originalStyles = {
-      outline: element.style.outline,
-      boxShadow: element.style.boxShadow,
-      backgroundColor: element.style.backgroundColor,
-      cursor: element.style.cursor
-    };
-
-    // 设置高亮样式
-    element.style.outline = '2px solid #007acc';
-    element.style.boxShadow = '0 0 0 2px rgba(0, 122, 204, 0.3)';
-    element.style.backgroundColor = 'rgba(0, 122, 204, 0.1)';
-    element.style.cursor = 'pointer';
-
-    // 保存高亮样式到元素上
-    element.setAttribute('data-selection-highlight', JSON.stringify(originalStyles));
-  }
-
-  /**
-   * 清除元素高亮
-   */
-  private clearElementHighlighting(element: HTMLElement) {
-    const highlightData = element.getAttribute('data-selection-highlight');
-    if (highlightData) {
-      try {
-        const originalStyles = JSON.parse(highlightData);
-        Object.entries(originalStyles).forEach(([property, value]) => {
-          (element.style as any)[property] = value;
-        });
-        element.removeAttribute('data-selection-highlight');
-      } catch (e) {
-        console.warn('[SelectionManager] Failed to restore original styles:', e);
-      }
     }
   }
 
@@ -298,7 +246,7 @@ export class SelectionManager {
   private selectAll() {
     const selectableElements = Array.from(
       this.container.querySelectorAll('*')
-    ).filter(el => this.isValidElement(el as HTMLElement));
+    ).filter(el => this.checkIsValidElement(el as HTMLElement));
 
     // 暂时只选择第一个元素，后续可以扩展为多选模式
     if (selectableElements.length > 0) {
@@ -329,153 +277,10 @@ export class SelectionManager {
   }
 
   /**
-   * 提取元素的完整信息
+   * 提取元素的完整信息 (Delegates to domUtils)
    */
   public extractElementInfo(element: HTMLElement): ElementInfo | null {
-    if (!element) return null;
-
-    const sourceInfo = this.extractSourceInfo(element);
-    if (!sourceInfo) {
-      console.warn('[SelectionManager] Element has no source mapping:', element);
-      return null;
-    }
-
-    // 计算元素的边界框信息
-    const rect = element.getBoundingClientRect();
-    const computedStyle = window.getComputedStyle(element);
-
-    // 判断是否为静态文本：
-    // 1. 检查元素是否有 static-content 属性
-    // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
-    const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
-    const isActuallyPureText = isPureStaticText(element);
-    const isStaticText = hasStaticContentAttr && isActuallyPureText;
-
-    // 获取文本内容：如果是静态文本，使用专门的方法获取；否则也返回内容（用于显示）
-    let textContent = '';
-    if (isStaticText) {
-      // 对于静态文本，使用专门的方法获取文本内容
-      textContent = this.getElementTextContent(element);
-    } else {
-      // 对于非静态文本，也返回内容（可能为空，但至少尝试获取）
-      textContent = element.innerText || element.textContent || '';
-    }
-
-    // Note: elementId is not part of ElementInfo anymore
-    return {
-      tagName: element.tagName.toLowerCase(),
-      className: element.className || '',
-      textContent: textContent,
-      sourceInfo,
-      isStaticText: isStaticText || false, // 默认为 false
-    };
-  }
-
-  /**
-   * 提取元素的源码信息
-   */
-  private extractSourceInfo(element: HTMLElement): SourceInfo | null {
-    // 优先尝试从 info JSON 属性获取
-    const sourceInfoStr = element.getAttribute(AttributeNames.info);
-    if (sourceInfoStr) {
-      try {
-        const sourceInfo = JSON.parse(sourceInfoStr);
-        return {
-          fileName: sourceInfo.fileName,
-          lineNumber: sourceInfo.lineNumber,
-          columnNumber: sourceInfo.columnNumber
-        };
-      } catch (e) {
-        console.warn('[SelectionManager] Failed to parse source info:', e);
-      }
-    }
-
-    // 备用方案：从个别属性获取
-    const fileName = element.getAttribute(AttributeNames.file);
-    const lineStr = element.getAttribute(AttributeNames.line);
-    const columnStr = element.getAttribute(AttributeNames.column);
-
-    if (fileName && lineStr && columnStr) {
-      return {
-        fileName,
-        lineNumber: parseInt(lineStr, 10),
-        columnNumber: parseInt(columnStr, 10)
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * 获取元素的文本内容（递归获取所有文本）
-   */
-  private getElementTextContent(element: HTMLElement): string {
-    // 优先使用 textContent，它包含所有文本
-    let textContent = element.textContent || '';
-
-    // 如果文本内容太长，截取前100个字符
-    if (textContent.length > 100) {
-      textContent = textContent.substring(0, 100) + '...';
-    }
-
-    return textContent.trim();
-  }
-
-  /**
-   * 获取元素的所有属性
-   */
-  private getElementAttributes(element: HTMLElement): Record<string, string> {
-    const attributes: Record<string, string> = {};
-    const elementAttributes = Array.from(element.attributes);
-
-    elementAttributes.forEach(attr => {
-      // 过滤掉源码映射属性和选择相关的属性
-      if (!isSourceMappingAttribute(attr.name) &&
-        !attr.name.startsWith('data-selection-')) {
-        attributes[attr.name] = attr.value;
-      }
-    });
-
-    return attributes;
-  }
-
-  /**
-   * 获取元素的DOM路径
-   */
-  private getElementDomPath(element: HTMLElement): string {
-    const path: string[] = [];
-    let current: HTMLElement | null = element;
-
-    while (current && current !== this.container) {
-      let selector = current.tagName.toLowerCase();
-
-      if (current.id) {
-        selector += `#${current.id}`;
-        path.unshift(selector);
-        break;
-      }
-
-      if (current.className) {
-        const classes = Array.from(current.classList).slice(0, 3); // 只取前3个类名
-        selector += `.${classes.join('.')}`;
-      }
-
-      // 计算兄弟元素索引
-      const siblings = Array.from(current.parentNode?.children || []);
-      const sameTagSiblings = siblings.filter(sibling =>
-        sibling.tagName === current!.tagName
-      );
-
-      if (sameTagSiblings.length > 1) {
-        const index = sameTagSiblings.indexOf(current);
-        selector += `:nth-of-type(${index + 1})`;
-      }
-
-      path.unshift(selector);
-      current = current.parentElement;
-    }
-
-    return path.join(' > ');
+    return extractElementInfo(element);
   }
 
   /**
