@@ -25,13 +25,23 @@ switch (command) {
 
 用法:
   npx @xagi/vite-plugin-design-mode <command>
+  pnpm dlx @xagi/vite-plugin-design-mode <command>
 
 命令:
-  install     一键安装/升级插件并自动配置 vite.config
-  uninstall  卸载插件并清理配置文件
+  install     在 package.json 和 vite.config 中添加插件配置
+  uninstall   从 package.json 和 vite.config 中移除插件配置
+
+说明:
+  - 这些命令只会在配置文件中添加/移除插件配置，不会执行包管理器命令
+  - 配置完成后，请手动运行包管理器命令来安装/卸载依赖
 
 示例:
+  # 安装
+  pnpm dlx @xagi/vite-plugin-design-mode install
   npx @xagi/vite-plugin-design-mode install
+  
+  # 卸载
+  pnpm dlx @xagi/vite-plugin-design-mode uninstall
   npx @xagi/vite-plugin-design-mode uninstall
 
 更多信息请访问: https://www.npmjs.com/package/@xagi/vite-plugin-design-mode
@@ -42,4 +52,3 @@ switch (command) {
     console.error('使用 --help 查看可用命令');
     process.exit(1);
 }
-

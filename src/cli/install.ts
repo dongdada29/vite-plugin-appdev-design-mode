@@ -3,17 +3,35 @@
 /**
  * 一键安装 @xagi/vite-plugin-design-mode 插件
  * 功能：
- * 1. 检测插件是否已安装，如果已安装则升级到最新版本
- * 2. 自动检测并修改 vite.config.ts/js/mjs
- * 3. 添加必要的 import 和插件配置
+ * 1. 在 package.json 中添加插件依赖
+ * 2. 在 vite.config.ts/js/mjs 中添加 import 和插件配置
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join, resolve } from 'path';
-import { execSync } from 'child_process';
+import { join, resolve, dirname } from 'path';
 
 const PLUGIN_NAME = '@xagi/vite-plugin-design-mode';
 const VITE_CONFIG_FILES = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs'];
+
+/**
+ * 查找项目根目录（包含 package.json 的目录）
+ * 从当前目录向上查找，直到找到 package.json 或到达文件系统根目录
+ */
+function findProjectRoot(startDir: string = process.cwd()): string {
+  let currentDir = resolve(startDir);
+  const root = resolve('/');
+  
+  while (currentDir !== root) {
+    const packageJsonPath = join(currentDir, 'package.json');
+    if (existsSync(packageJsonPath)) {
+      return currentDir;
+    }
+    currentDir = dirname(currentDir);
+  }
+  
+  // 如果找不到，返回原始目录
+  return startDir;
+}
 
 interface PackageJson {
   dependencies?: Record<string, string>;
@@ -42,74 +60,6 @@ function hasReact(packageJson: PackageJson): boolean {
 }
 
 /**
- * 检测项目使用的包管理器
- * 优先级：
- * 1. package.json 中的 packageManager 字段（npm 7+ / pnpm 7+ / yarn 2+）
- * 2. 环境变量（PNPM_HOME, YARN_* 等）
- * 3. 检查 lock 文件
- * 4. 检查哪个包管理器命令可用
- * 5. 默认使用 npm
- */
-function detectPackageManager(): 'npm' | 'pnpm' | 'yarn' {
-  const packageJsonPath = join(process.cwd(), 'package.json');
-  
-  // 1. 检查 package.json 中的 packageManager 字段（最高优先级）
-  if (existsSync(packageJsonPath)) {
-    try {
-      const packageJson: PackageJson & { packageManager?: string } = JSON.parse(
-        readFileSync(packageJsonPath, 'utf-8')
-      );
-      if (packageJson.packageManager) {
-        const pm = packageJson.packageManager.split('@')[0];
-        if (pm === 'pnpm' || pm === 'yarn' || pm === 'npm') {
-          return pm as 'npm' | 'pnpm' | 'yarn';
-        }
-      }
-    } catch (e) {
-      // 忽略解析错误，继续其他检测方法
-    }
-  }
-  
-  // 2. 检查环境变量（检测当前运行环境）
-  // 如果通过 pnpm dlx 运行，会有相关环境变量
-  if (process.env.PNPM_HOME || process.env.pnpm_execpath || process.env.npm_config_user_agent?.includes('pnpm')) {
-    return 'pnpm';
-  }
-  if (process.env.YARN_VERSION || process.env.npm_config_user_agent?.includes('yarn')) {
-    return 'yarn';
-  }
-  
-  // 3. 检查 lock 文件
-  if (existsSync(join(process.cwd(), 'pnpm-lock.yaml'))) {
-    return 'pnpm';
-  }
-  if (existsSync(join(process.cwd(), 'yarn.lock'))) {
-    return 'yarn';
-  }
-  if (existsSync(join(process.cwd(), 'package-lock.json'))) {
-    return 'npm';
-  }
-  
-  // 4. 尝试检测哪个包管理器命令可用
-  try {
-    execSync('pnpm --version', { stdio: 'ignore', cwd: process.cwd() });
-    return 'pnpm';
-  } catch (e) {
-    // pnpm 不可用，继续检查
-  }
-  
-  try {
-    execSync('yarn --version', { stdio: 'ignore', cwd: process.cwd() });
-    return 'yarn';
-  } catch (e) {
-    // yarn 不可用，继续检查
-  }
-  
-  // 5. 默认使用 pnpm
-  return 'pnpm';
-}
-
-/**
  * 检测插件是否已安装
  */
 function isPluginInstalled(packageJson: PackageJson): boolean {
@@ -120,11 +70,31 @@ function isPluginInstalled(packageJson: PackageJson): boolean {
 }
 
 /**
+ * 在 package.json 中添加插件依赖
+ */
+function addPluginToPackageJson(packageJson: PackageJson): PackageJson {
+  // 如果已安装，不做任何修改
+  if (isPluginInstalled(packageJson)) {
+    return packageJson;
+  }
+
+  // 确保 devDependencies 存在
+  if (!packageJson.devDependencies) {
+    packageJson.devDependencies = {};
+  }
+
+  // 添加到 devDependencies
+  packageJson.devDependencies[PLUGIN_NAME] = 'latest';
+
+  return packageJson;
+}
+
+/**
  * 查找 vite.config 文件
  */
-function findViteConfig(): string | null {
+function findViteConfig(projectRoot: string): string | null {
   for (const file of VITE_CONFIG_FILES) {
-    const configPath = join(process.cwd(), file);
+    const configPath = join(projectRoot, file);
     if (existsSync(configPath)) {
       return configPath;
     }
@@ -138,7 +108,6 @@ function findViteConfig(): string | null {
 function hasImport(content: string): boolean {
   // 匹配各种导入格式
   const importPatterns = [
-    /import\s+appdevDesignMode\s+from\s+['"]@xagi\/vite-plugin-design-mode['"]/,
     /import\s+appdevDesignMode\s+from\s+['"]@xagi\/vite-plugin-design-mode['"]/,
     /import\s+\{\s*default\s+as\s+appdevDesignMode\s*\}\s+from\s+['"]@xagi\/vite-plugin-design-mode['"]/,
   ];
@@ -220,7 +189,6 @@ function addPluginConfig(content: string): string {
     while (i < content.length && depth > 0) {
       const char = content[i];
       const prevChar = i > 0 ? content[i - 1] : '';
-      const nextChar = i < content.length - 1 ? content[i + 1] : '';
       
       // 处理字符串（单引号、双引号）
       if ((char === '"' || char === "'") && prevChar !== '\\') {
@@ -321,88 +289,20 @@ function addPluginConfig(content: string): string {
 }
 
 /**
- * 安装或升级插件
- */
-function installOrUpgradePlugin(packageManager: 'npm' | 'pnpm' | 'yarn', isInstalled: boolean): void {
-  const commands = {
-    npm: isInstalled 
-      ? `npm install ${PLUGIN_NAME}@latest --save-dev`
-      : `npm install ${PLUGIN_NAME} --save-dev`,
-    pnpm: isInstalled
-      ? `pnpm add ${PLUGIN_NAME}@latest -D`
-      : `pnpm add ${PLUGIN_NAME} -D`,
-    yarn: isInstalled
-      ? `yarn add ${PLUGIN_NAME}@latest -D`
-      : `yarn add ${PLUGIN_NAME} -D`,
-  };
-
-  console.log(`\n${isInstalled ? '升级' : '安装'}插件 ${PLUGIN_NAME}...`);
-  console.log(`执行命令: ${commands[packageManager]}\n`);
-  
-  try {
-    // 根据包管理器设置相应的环境变量
-    const env = {
-      ...process.env,
-    } as NodeJS.ProcessEnv;
-    
-    // 仅对 npm 设置 NPM_CONFIG_* 环境变量
-    if (packageManager === 'npm') {
-      // 禁用 npm 的进度条，可能有助于避免某些内部错误
-      env.NPM_CONFIG_PROGRESS = 'false';
-      // 使用标准输出模式，避免某些 npm 版本的问题
-      env.NPM_CONFIG_COLOR = 'false';
-    }
-    
-    execSync(commands[packageManager], { 
-      stdio: 'inherit',
-      cwd: process.cwd(),
-      env: env,
-    });
-    console.log(`\n✓ 插件 ${isInstalled ? '升级' : '安装'}成功！\n`);
-  } catch (error: any) {
-    // 提供更详细的错误信息
-    const errorMessage = error?.message || String(error);
-    const errorOutput = error?.output ? error.output.filter(Boolean).join('\n') : '';
-    const errorStdout = error?.stdout?.toString() || '';
-    const errorStderr = error?.stderr?.toString() || '';
-    
-    console.error(`\n✗ 插件 ${isInstalled ? '升级' : '安装'}失败！`);
-    console.error(`\n错误详情:`);
-    if (errorMessage) {
-      console.error(`  ${errorMessage}`);
-    }
-    if (errorStderr) {
-      console.error(`\n错误输出:\n${errorStderr}`);
-    }
-    if (errorStdout) {
-      console.error(`\n标准输出:\n${errorStdout}`);
-    }
-    if (errorOutput) {
-      console.error(`\n完整输出:\n${errorOutput}`);
-    }
-    
-    // 提供解决建议
-    console.error(`\n💡 解决建议:`);
-    console.error(`  1. 尝试手动安装: ${commands[packageManager]}`);
-    console.error(`  2. 检查 npm 版本: npm --version`);
-    console.error(`  3. 清理 npm 缓存: npm cache clean --force`);
-    console.error(`  4. 检查网络连接和 npm 镜像源`);
-    console.error(`  5. 如果问题持续，请尝试使用其他包管理器（pnpm 或 yarn）\n`);
-    
-    process.exit(1);
-  }
-}
-
-/**
  * 主函数
  */
 function main() {
   console.log('🚀 开始一键安装 @xagi/vite-plugin-design-mode 插件...\n');
 
+  // 0. 查找项目根目录（支持 pnpm dlx / npx 等场景）
+  const projectRoot = findProjectRoot();
+  console.log(`📁 项目根目录: ${projectRoot}\n`);
+
   // 1. 读取 package.json
-  const packageJsonPath = join(process.cwd(), 'package.json');
+  const packageJsonPath = join(projectRoot, 'package.json');
   if (!existsSync(packageJsonPath)) {
     console.error('✗ 错误: 未找到 package.json 文件');
+    console.error(`  当前目录: ${projectRoot}`);
     console.error('  请确保在项目根目录下运行此命令。');
     process.exit(1);
   }
@@ -431,40 +331,48 @@ function main() {
   
   console.log('✓ 检测到 Vite + React 项目');
 
-  // 3. 检测包管理器
-  const packageManager = detectPackageManager();
-  console.log(`📦 检测到包管理器: ${packageManager}`);
-
-  // 4. 检测插件是否已安装
+  // 3. 检测插件是否已安装
   const isInstalled = isPluginInstalled(packageJson);
   console.log(`🔍 插件状态: ${isInstalled ? '已安装' : '未安装'}`);
 
-  // 5. 安装或升级插件
-  installOrUpgradePlugin(packageManager, isInstalled);
+  // 4. 在 package.json 中添加插件依赖
+  const updatedPackageJson = addPluginToPackageJson(packageJson);
+  if (updatedPackageJson !== packageJson) {
+    writeFileSync(
+      packageJsonPath,
+      JSON.stringify(updatedPackageJson, null, 2) + '\n',
+      'utf-8'
+    );
+    console.log(`✓ 已在 package.json 中添加插件依赖: ${PLUGIN_NAME}@latest`);
+  } else {
+    console.log(`ℹ️  package.json 中已包含插件依赖，无需更新`);
+  }
 
-  // 6. 查找并修改 vite.config 文件
-  const viteConfigPath = findViteConfig();
+  // 5. 查找并修改 vite.config 文件
+  const viteConfigPath = findViteConfig(projectRoot);
   if (!viteConfigPath) {
-    console.warn('⚠️  警告: 未找到 vite.config 文件');
+    console.warn('\n⚠️  警告: 未找到 vite.config 文件');
     console.warn('  请手动在 vite.config.ts/js/mjs 中添加以下配置:');
     console.warn('  import appdevDesignMode from "@xagi/vite-plugin-design-mode";');
     console.warn('  plugins: [appdevDesignMode()]');
+    console.log('\n✅ 配置完成！');
+    console.log('请运行包管理器安装命令（如: pnpm install）来安装依赖。\n');
     return;
   }
 
   console.log(`📝 找到配置文件: ${viteConfigPath}`);
 
-  // 7. 读取配置文件内容
+  // 6. 读取配置文件内容
   let configContent = readFileSync(viteConfigPath, 'utf-8');
   const originalContent = configContent;
 
-  // 8. 添加 import
+  // 7. 添加 import
   configContent = addImport(configContent);
 
-  // 9. 添加插件配置
+  // 8. 添加插件配置
   configContent = addPluginConfig(configContent);
 
-  // 10. 如果内容有变化，写入文件
+  // 9. 如果内容有变化，写入文件
   if (configContent !== originalContent) {
     writeFileSync(viteConfigPath, configContent, 'utf-8');
     console.log(`✓ 已更新配置文件: ${viteConfigPath}`);
@@ -472,10 +380,12 @@ function main() {
     console.log(`ℹ️  配置文件已包含插件配置，无需更新`);
   }
 
-  console.log('\n✅ 安装完成！');
-  console.log('\n现在你可以在 vite.config 中使用 appdevDesignMode() 了。');
-  console.log('插件已配置为仅在开发环境生效，生产构建时不会包含相关代码。\n');
+  console.log('\n✅ 配置完成！');
+  console.log('\n📦 下一步: 请运行包管理器安装命令来安装依赖:');
+  console.log('  - pnpm install');
+  console.log('  - npm install');
+  console.log('  - yarn install');
+  console.log('\n插件已配置为仅在开发环境生效，生产构建时不会包含相关代码。\n');
 }
 
 export { main };
-

@@ -16,17 +16,28 @@
 
 ### 一键安装（推荐）
 
-使用 CLI 工具一键安装插件并自动配置 `vite.config.ts`：
+使用 CLI 工具一键配置插件：
 
 ```bash
 npx @xagi/vite-plugin-design-mode install
+# 或
+pnpm dlx @xagi/vite-plugin-design-mode install
 ```
 
 这个命令会：
-- 自动检测项目使用的包管理器（npm/pnpm/yarn）
-- 安装或升级插件到最新版本
-- 自动在 `vite.config.ts` 中添加插件配置
+- 在 `package.json` 的 `devDependencies` 中添加插件依赖
+- 自动在 `vite.config.ts/js/mjs` 中添加插件配置
 - 使用默认配置，无需手动传参
+
+**注意：** CLI 只会在配置文件中添加配置，不会执行包管理器安装命令。配置完成后，请手动运行包管理器安装命令来安装依赖：
+
+```bash
+pnpm install
+# 或
+npm install
+# 或
+yarn install
+```
 
 ### 一键卸载
 
@@ -34,12 +45,24 @@ npx @xagi/vite-plugin-design-mode install
 
 ```bash
 npx @xagi/vite-plugin-design-mode uninstall
+# 或
+pnpm dlx @xagi/vite-plugin-design-mode uninstall
 ```
 
 这个命令会：
 - 从 `package.json` 中移除插件依赖
-- 从 `vite.config.ts` 中移除 import 和插件配置
+- 从 `vite.config.ts/js/mjs` 中移除 import 和插件配置
 - 自动清理所有相关配置
+
+**注意：** CLI 只会在配置文件中移除配置，不会执行包管理器卸载命令。配置清理完成后，请手动运行包管理器卸载命令来移除依赖：
+
+```bash
+pnpm remove @xagi/vite-plugin-design-mode
+# 或
+npm uninstall @xagi/vite-plugin-design-mode
+# 或
+yarn remove @xagi/vite-plugin-design-mode
+```
 
 ### 手动安装
 

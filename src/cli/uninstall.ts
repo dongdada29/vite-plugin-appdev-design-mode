@@ -8,84 +8,35 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import { execSync } from 'child_process';
+import { join, resolve, dirname } from 'path';
 
 const PLUGIN_NAME = '@xagi/vite-plugin-design-mode';
 const VITE_CONFIG_FILES = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs'];
+
+/**
+ * 查找项目根目录（包含 package.json 的目录）
+ * 从当前目录向上查找，直到找到 package.json 或到达文件系统根目录
+ */
+function findProjectRoot(startDir: string = process.cwd()): string {
+  let currentDir = resolve(startDir);
+  const root = resolve('/');
+  
+  while (currentDir !== root) {
+    const packageJsonPath = join(currentDir, 'package.json');
+    if (existsSync(packageJsonPath)) {
+      return currentDir;
+    }
+    currentDir = dirname(currentDir);
+  }
+  
+  // 如果找不到，返回原始目录
+  return startDir;
+}
 
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   packageManager?: string;
-}
-
-/**
- * 检测项目使用的包管理器
- * 优先级：
- * 1. package.json 中的 packageManager 字段（npm 7+ / pnpm 7+ / yarn 2+）
- * 2. 环境变量（PNPM_HOME, YARN_* 等）
- * 3. 检查 lock 文件
- * 4. 检查哪个包管理器命令可用
- * 5. 默认使用 npm
- */
-function detectPackageManager(): 'npm' | 'pnpm' | 'yarn' {
-  const packageJsonPath = join(process.cwd(), 'package.json');
-  
-  // 1. 检查 package.json 中的 packageManager 字段（最高优先级）
-  if (existsSync(packageJsonPath)) {
-    try {
-      const packageJson: PackageJson = JSON.parse(
-        readFileSync(packageJsonPath, 'utf-8')
-      );
-      if (packageJson.packageManager) {
-        const pm = packageJson.packageManager.split('@')[0];
-        if (pm === 'pnpm' || pm === 'yarn' || pm === 'npm') {
-          return pm as 'npm' | 'pnpm' | 'yarn';
-        }
-      }
-    } catch (e) {
-      // 忽略解析错误，继续其他检测方法
-    }
-  }
-  
-  // 2. 检查环境变量（检测当前运行环境）
-  // 如果通过 pnpm dlx 运行，会有相关环境变量
-  if (process.env.PNPM_HOME || process.env.pnpm_execpath || process.env.npm_config_user_agent?.includes('pnpm')) {
-    return 'pnpm';
-  }
-  if (process.env.YARN_VERSION || process.env.npm_config_user_agent?.includes('yarn')) {
-    return 'yarn';
-  }
-  
-  // 3. 检查 lock 文件
-  if (existsSync(join(process.cwd(), 'pnpm-lock.yaml'))) {
-    return 'pnpm';
-  }
-  if (existsSync(join(process.cwd(), 'yarn.lock'))) {
-    return 'yarn';
-  }
-  if (existsSync(join(process.cwd(), 'package-lock.json'))) {
-    return 'npm';
-  }
-  
-  // 4. 尝试检测哪个包管理器命令可用
-  try {
-    execSync('pnpm --version', { stdio: 'ignore', cwd: process.cwd() });
-    return 'pnpm';
-  } catch (e) {
-    // pnpm 不可用，继续检查
-  }
-  
-  try {
-    execSync('yarn --version', { stdio: 'ignore', cwd: process.cwd() });
-    return 'yarn';
-  } catch (e) {
-    // yarn 不可用，继续检查
-  }
-  
-  // 5. 默认使用 pnpm
-  return 'pnpm';
 }
 
 /**
@@ -99,11 +50,41 @@ function isPluginInstalled(packageJson: PackageJson): boolean {
 }
 
 /**
+ * 从 package.json 中移除插件依赖
+ */
+function removePluginFromPackageJson(packageJson: PackageJson): PackageJson {
+  // 如果未安装，不做任何修改
+  if (!isPluginInstalled(packageJson)) {
+    return packageJson;
+  }
+
+  // 从 dependencies 中移除
+  if (packageJson.dependencies?.[PLUGIN_NAME]) {
+    delete packageJson.dependencies[PLUGIN_NAME];
+    // 如果 dependencies 为空，可以删除整个对象（可选）
+    if (Object.keys(packageJson.dependencies).length === 0) {
+      delete packageJson.dependencies;
+    }
+  }
+
+  // 从 devDependencies 中移除
+  if (packageJson.devDependencies?.[PLUGIN_NAME]) {
+    delete packageJson.devDependencies[PLUGIN_NAME];
+    // 如果 devDependencies 为空，可以删除整个对象（可选）
+    if (Object.keys(packageJson.devDependencies).length === 0) {
+      delete packageJson.devDependencies;
+    }
+  }
+
+  return packageJson;
+}
+
+/**
  * 查找 vite.config 文件
  */
-function findViteConfig(): string | null {
+function findViteConfig(projectRoot: string): string | null {
   for (const file of VITE_CONFIG_FILES) {
-    const configPath = join(process.cwd(), file);
+    const configPath = join(projectRoot, file);
     if (existsSync(configPath)) {
       return configPath;
     }
@@ -166,40 +147,20 @@ function removePluginConfig(content: string): string {
 }
 
 /**
- * 卸载插件
- */
-function uninstallPlugin(packageManager: 'npm' | 'pnpm' | 'yarn'): void {
-  const commands = {
-    npm: `npm uninstall ${PLUGIN_NAME}`,
-    pnpm: `pnpm remove ${PLUGIN_NAME}`,
-    yarn: `yarn remove ${PLUGIN_NAME}`,
-  };
-
-  console.log(`\n卸载插件 ${PLUGIN_NAME}...`);
-  console.log(`执行命令: ${commands[packageManager]}\n`);
-  
-  try {
-    execSync(commands[packageManager], { 
-      stdio: 'inherit',
-      cwd: process.cwd()
-    });
-    console.log(`\n✓ 插件卸载成功！\n`);
-  } catch (error) {
-    console.error(`\n✗ 插件卸载失败:`, error);
-    process.exit(1);
-  }
-}
-
-/**
  * 主函数
  */
 function main() {
   console.log('🗑️  开始卸载 @xagi/vite-plugin-design-mode 插件...\n');
 
+  // 0. 查找项目根目录（支持 pnpm dlx / npx 等场景）
+  const projectRoot = findProjectRoot();
+  console.log(`📁 项目根目录: ${projectRoot}\n`);
+
   // 1. 读取 package.json
-  const packageJsonPath = join(process.cwd(), 'package.json');
+  const packageJsonPath = join(projectRoot, 'package.json');
   if (!existsSync(packageJsonPath)) {
     console.error('✗ 错误: 未找到 package.json 文件');
+    console.error(`  当前目录: ${projectRoot}`);
     console.error('  请确保在项目根目录下运行此命令。');
     process.exit(1);
   }
@@ -215,34 +176,39 @@ function main() {
     return;
   }
 
-  // 3. 检测包管理器
-  const packageManager = detectPackageManager();
-  console.log(`📦 检测到包管理器: ${packageManager}`);
+  // 3. 从 package.json 中移除插件依赖
+  const updatedPackageJson = removePluginFromPackageJson(packageJson);
+  if (updatedPackageJson !== packageJson) {
+    writeFileSync(
+      packageJsonPath,
+      JSON.stringify(updatedPackageJson, null, 2) + '\n',
+      'utf-8'
+    );
+    console.log(`✓ 已从 package.json 中移除插件依赖: ${PLUGIN_NAME}`);
+  }
 
-  // 4. 卸载插件依赖
-  uninstallPlugin(packageManager);
-
-  // 5. 查找并修改 vite.config 文件
-  const viteConfigPath = findViteConfig();
+  // 4. 查找并修改 vite.config 文件
+  const viteConfigPath = findViteConfig(projectRoot);
   if (!viteConfigPath) {
-    console.warn('⚠️  未找到 vite.config 文件，跳过配置文件清理。');
+    console.warn('\n⚠️  未找到 vite.config 文件，跳过配置文件清理。');
     console.log('\n✅ 卸载完成！');
+    console.log('请手动运行包管理器卸载命令（如: pnpm remove @xagi/vite-plugin-design-mode）来移除依赖。\n');
     return;
   }
 
   console.log(`📝 找到配置文件: ${viteConfigPath}`);
 
-  // 6. 读取配置文件内容
+  // 5. 读取配置文件内容
   let configContent = readFileSync(viteConfigPath, 'utf-8');
   const originalContent = configContent;
 
-  // 7. 移除 import
+  // 6. 移除 import
   configContent = removeImport(configContent);
 
-  // 8. 移除插件配置
+  // 7. 移除插件配置
   configContent = removePluginConfig(configContent);
 
-  // 9. 如果内容有变化，写入文件
+  // 8. 如果内容有变化，写入文件
   if (configContent !== originalContent) {
     writeFileSync(viteConfigPath, configContent, 'utf-8');
     console.log(`✓ 已清理配置文件: ${viteConfigPath}`);
@@ -251,7 +217,11 @@ function main() {
   }
 
   console.log('\n✅ 卸载完成！');
-  console.log('插件及其配置已从项目中移除。\n');
+  console.log('\n📦 下一步: 请运行包管理器卸载命令来移除依赖:');
+  console.log('  - pnpm remove @xagi/vite-plugin-design-mode');
+  console.log('  - npm uninstall @xagi/vite-plugin-design-mode');
+  console.log('  - yarn remove @xagi/vite-plugin-design-mode');
+  console.log('\n插件配置已从项目中移除。\n');
 }
 
 export { main };
