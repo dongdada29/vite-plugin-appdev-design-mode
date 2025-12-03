@@ -47,7 +47,7 @@ export function showContextMenu(
       const separator = document.createElement('div');
       separator.style.height = '1px';
       separator.style.background = '#e5e7eb';
-      separator.style.margin = '4px 0';
+      separator.style.margin = '0';
       separator.style.padding = '0';
       menu.appendChild(separator);
       return;
