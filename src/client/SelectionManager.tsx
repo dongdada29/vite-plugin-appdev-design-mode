@@ -2,6 +2,7 @@ import React, { useEffect, useCallback, useRef } from 'react';
 import { useDesignMode } from './DesignModeContext';
 import { ElementInfo, SourceInfo } from '../types/messages';
 import { AttributeNames, isSourceMappingAttribute } from './utils/attributeNames';
+import { isPureStaticText } from './utils/elementUtils';
 
 /**
  * 元素选择管理器
@@ -343,14 +344,18 @@ export class SelectionManager {
     const rect = element.getBoundingClientRect();
     const computedStyle = window.getComputedStyle(element);
 
-    // 判断是否为静态文本：检查元素是否有 static-content 属性
-    const isStaticText = element.hasAttribute(AttributeNames.staticContent);
+    // 判断是否为静态文本：
+    // 1. 检查元素是否有 static-content 属性
+    // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
+    const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
+    const isActuallyPureText = isPureStaticText(element);
+    const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
     // Note: elementId is not part of ElementInfo anymore
     return {
       tagName: element.tagName.toLowerCase(),
       className: element.className || '',
-      // Only return text content if element is marked as static content
+      // Only return text content if element is marked as static content and is actually pure text
       textContent: isStaticText ? this.getElementTextContent(element) : '',
       sourceInfo,
       isStaticText: isStaticText || false, // 默认为 false

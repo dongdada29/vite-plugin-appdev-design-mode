@@ -284,13 +284,51 @@ function installOrUpgradePlugin(packageManager: 'npm' | 'pnpm' | 'yarn', isInsta
   console.log(`执行命令: ${commands[packageManager]}\n`);
   
   try {
+    // 设置环境变量，优化 npm 执行环境
+    const env = {
+      ...process.env,
+      // 禁用 npm 的进度条，可能有助于避免某些内部错误
+      NPM_CONFIG_PROGRESS: 'false',
+      // 使用标准输出模式，避免某些 npm 版本的问题
+      NPM_CONFIG_COLOR: 'false',
+    };
+    
     execSync(commands[packageManager], { 
       stdio: 'inherit',
-      cwd: process.cwd()
+      cwd: process.cwd(),
+      env: env,
     });
     console.log(`\n✓ 插件 ${isInstalled ? '升级' : '安装'}成功！\n`);
-  } catch (error) {
-    console.error(`\n✗ 插件 ${isInstalled ? '升级' : '安装'}失败:`, error);
+  } catch (error: any) {
+    // 提供更详细的错误信息
+    const errorMessage = error?.message || String(error);
+    const errorOutput = error?.output ? error.output.filter(Boolean).join('\n') : '';
+    const errorStdout = error?.stdout?.toString() || '';
+    const errorStderr = error?.stderr?.toString() || '';
+    
+    console.error(`\n✗ 插件 ${isInstalled ? '升级' : '安装'}失败！`);
+    console.error(`\n错误详情:`);
+    if (errorMessage) {
+      console.error(`  ${errorMessage}`);
+    }
+    if (errorStderr) {
+      console.error(`\n错误输出:\n${errorStderr}`);
+    }
+    if (errorStdout) {
+      console.error(`\n标准输出:\n${errorStdout}`);
+    }
+    if (errorOutput) {
+      console.error(`\n完整输出:\n${errorOutput}`);
+    }
+    
+    // 提供解决建议
+    console.error(`\n💡 解决建议:`);
+    console.error(`  1. 尝试手动安装: ${commands[packageManager]}`);
+    console.error(`  2. 检查 npm 版本: npm --version`);
+    console.error(`  3. 清理 npm 缓存: npm cache clean --force`);
+    console.error(`  4. 检查网络连接和 npm 镜像源`);
+    console.error(`  5. 如果问题持续，请尝试使用其他包管理器（pnpm 或 yarn）\n`);
+    
     process.exit(1);
   }
 }

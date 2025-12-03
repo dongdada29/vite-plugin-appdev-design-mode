@@ -69,7 +69,7 @@ export function createSourceMappingPlugin(
 
         // Check if content is static and add attribute
         if (isStaticContent(path)) {
-          addStaticContentAttribute(node, options);
+          addStaticContentAttribute(node, path, options);
         }
       }
     }
@@ -264,6 +264,7 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
 
 /**
  * Check if the JSX element contains only static content
+ * 严格检查：只能包含纯文本节点（JSXText），不能包含任何其他元素标签或表达式容器
  */
 function isStaticContent(path: NodePath): boolean {
   const { node } = path;
@@ -271,27 +272,43 @@ function isStaticContent(path: NodePath): boolean {
 
   if (!t.isJSXElement(element)) return false;
 
-  return element.children.every(child => {
-    // Allow plain text
-    if (t.isJSXText(child)) return true;
+  // 如果没有子节点，不是静态内容（空元素）
+  if (element.children.length === 0) return false;
 
-    // Allow expression containers with literals
-    if (t.isJSXExpressionContainer(child)) {
-      const expr = child.expression;
-      return t.isStringLiteral(expr) || t.isNumericLiteral(expr);
+  // 严格检查：只能包含纯文本节点（JSXText）
+  // 不允许表达式容器、嵌套元素、注释等任何其他类型的节点
+  return element.children.every(child => {
+    // 只允许纯文本节点
+    if (t.isJSXText(child)) {
+      // 检查文本内容是否为空（只包含空白字符）
+      // 如果文本只包含空白字符，仍然认为是有效的文本节点
+      return true;
     }
 
-    // Disallow everything else (nested elements, variables, function calls, etc.)
+    // 禁止所有其他类型的节点：
+    // - JSXExpressionContainer（表达式容器，即使是字面量也不允许）
+    // - JSXElement（嵌套元素）
+    // - JSXFragment（Fragment）
+    // - JSXSpreadChild（展开子元素）
+    // - 其他任何类型的节点
     return false;
   });
 }
 
 /**
  * Add static-content attribute (使用配置的前缀)
+ * 只有在元素确实只包含纯文本节点时才会添加此属性
+ * 严格验证：确保元素只包含 JSXText 节点，不包含任何其他元素标签或表达式容器
  */
-function addStaticContentAttribute(node: t.JSXOpeningElement, options: Required<DesignModeOptions>) {
+function addStaticContentAttribute(node: t.JSXOpeningElement, path: NodePath, options: Required<DesignModeOptions>) {
   const { attributePrefix } = options;
   const attributeName = `${attributePrefix}-static-content`;
+  
+  // 双重验证：再次检查元素是否真的只包含纯文本节点
+  // 即使调用前已经检查过，这里也再次验证以确保安全
+  if (!isStaticContent(path)) {
+    return; // 如果不是纯静态文本，不添加属性
+  }
   
   // Check if attribute already exists
   const hasAttr = node.attributes.some(a =>

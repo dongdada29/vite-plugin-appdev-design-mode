@@ -9,6 +9,7 @@ import {
   ElementDeselectedMessage
 } from '../types/messages';
 import { AttributeNames } from './utils/attributeNames';
+import { isPureStaticText } from './utils/elementUtils';
 
 export const DesignModeBridge: React.FC = () => {
   const { selectedElement, modifyElementClass, updateElementContent } =
@@ -86,8 +87,12 @@ export const DesignModeBridge: React.FC = () => {
         });
 
         // 确保我们有有效的元素数据
-        // 判断是否为静态文本：检查元素是否有 static-content 属性
-        const isStaticText = selectedElement.hasAttribute(AttributeNames.staticContent);
+        // 判断是否为静态文本：
+        // 1. 检查元素是否有 static-content 属性
+        // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
+        const hasStaticContentAttr = selectedElement.hasAttribute(AttributeNames.staticContent);
+        const isActuallyPureText = isPureStaticText(selectedElement);
+        const isStaticText = hasStaticContentAttr && isActuallyPureText;
         
         const elementData = {
           tagName: selectedElement.tagName.toLowerCase(),

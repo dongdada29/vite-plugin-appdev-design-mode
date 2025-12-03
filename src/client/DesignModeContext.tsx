@@ -23,6 +23,7 @@ import {
 } from '../types/messages';
 import { bridge, messageValidator } from './bridge';
 import { AttributeNames } from './utils/attributeNames';
+import { isPureStaticText } from './utils/elementUtils';
 
 export interface Modification {
   id: string;
@@ -677,8 +678,12 @@ export const DesignModeProvider: React.FC<{
           try {
             const sourceInfo = JSON.parse(sourceInfoStr);
 
-            // 判断是否为静态文本：检查元素是否有 static-content 属性
-            const isStaticText = element.hasAttribute(AttributeNames.staticContent);
+            // 判断是否为静态文本：
+            // 1. 检查元素是否有 static-content 属性
+            // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
+            const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
+            const isActuallyPureText = isPureStaticText(element);
+            const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
             const elementInfo: ElementInfo = {
               tagName: element.tagName.toLowerCase(),
