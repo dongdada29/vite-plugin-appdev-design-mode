@@ -9,9 +9,55 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const PLUGIN_NAME = '@xagi/vite-plugin-design-mode';
 const VITE_CONFIG_FILES = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs'];
+
+/**
+ * 获取当前插件的版本号
+ * 从 CLI 脚本所在目录向上查找 package.json
+ * 当通过 npx/pnpm dlx 运行时，会从临时目录查找
+ */
+function getPluginVersion(): string {
+  try {
+    // 获取当前文件的目录
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    
+    // 从 dist/cli 向上查找，找到插件的 package.json
+    // 当通过 npx/pnpm dlx 运行时，路径可能是：
+    // /Users/xxx/.npm/_npx/xxx/node_modules/@xagi/vite-plugin-design-mode/dist/cli/install.js
+    let currentDir = resolve(__dirname);
+    const root = resolve('/');
+    
+    // 最多向上查找 5 层，避免无限循环
+    let depth = 0;
+    const maxDepth = 5;
+    
+    while (currentDir !== root && depth < maxDepth) {
+      const packageJsonPath = join(currentDir, 'package.json');
+      if (existsSync(packageJsonPath)) {
+        try {
+          const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+          if (packageJson.name === PLUGIN_NAME && packageJson.version) {
+            return packageJson.version;
+          }
+        } catch (e) {
+          // 忽略解析错误，继续查找
+        }
+      }
+      currentDir = dirname(currentDir);
+      depth++;
+    }
+  } catch (e) {
+    // 如果获取失败，使用默认值
+  }
+  
+  // 如果找不到，返回 'latest' 作为后备
+  // 用户可以通过手动运行包管理器安装命令来安装最新版本
+  return 'latest';
+}
 
 /**
  * 查找项目根目录（包含 package.json 的目录）
@@ -72,19 +118,17 @@ function isPluginInstalled(packageJson: PackageJson): boolean {
 /**
  * 在 package.json 中添加插件依赖
  */
-function addPluginToPackageJson(packageJson: PackageJson): PackageJson {
-  // 如果已安装，不做任何修改
-  if (isPluginInstalled(packageJson)) {
-    return packageJson;
-  }
-
+function addPluginToPackageJson(packageJson: PackageJson, version: string): PackageJson {
+  // 如果已安装，更新版本号
+  const isInstalled = isPluginInstalled(packageJson);
+  
   // 确保 devDependencies 存在
   if (!packageJson.devDependencies) {
     packageJson.devDependencies = {};
   }
 
-  // 添加到 devDependencies
-  packageJson.devDependencies[PLUGIN_NAME] = 'latest';
+  // 添加或更新到 devDependencies
+  packageJson.devDependencies[PLUGIN_NAME] = `^${version}`;
 
   return packageJson;
 }
@@ -331,21 +375,32 @@ function main() {
   
   console.log('✓ 检测到 Vite + React 项目');
 
-  // 3. 检测插件是否已安装
+  // 3. 获取插件版本号
+  const pluginVersion = getPluginVersion();
+  console.log(`📦 插件版本: ${pluginVersion}`);
+
+  // 4. 检测插件是否已安装
   const isInstalled = isPluginInstalled(packageJson);
   console.log(`🔍 插件状态: ${isInstalled ? '已安装' : '未安装'}`);
 
-  // 4. 在 package.json 中添加插件依赖
-  const updatedPackageJson = addPluginToPackageJson(packageJson);
-  if (updatedPackageJson !== packageJson) {
+  // 5. 在 package.json 中添加或更新插件依赖
+  const updatedPackageJson = addPluginToPackageJson(packageJson, pluginVersion);
+  const versionString = `^${pluginVersion}`;
+  const currentVersion = packageJson.devDependencies?.[PLUGIN_NAME] || packageJson.dependencies?.[PLUGIN_NAME];
+  
+  if (!isInstalled || currentVersion !== versionString) {
     writeFileSync(
       packageJsonPath,
       JSON.stringify(updatedPackageJson, null, 2) + '\n',
       'utf-8'
     );
-    console.log(`✓ 已在 package.json 中添加插件依赖: ${PLUGIN_NAME}@latest`);
+    if (isInstalled) {
+      console.log(`✓ 已更新 package.json 中的插件版本: ${PLUGIN_NAME}@${versionString}`);
+    } else {
+      console.log(`✓ 已在 package.json 中添加插件依赖: ${PLUGIN_NAME}@${versionString}`);
+    }
   } else {
-    console.log(`ℹ️  package.json 中已包含插件依赖，无需更新`);
+    console.log(`ℹ️  package.json 中已包含插件依赖，版本为: ${currentVersion}`);
   }
 
   // 5. 查找并修改 vite.config 文件
