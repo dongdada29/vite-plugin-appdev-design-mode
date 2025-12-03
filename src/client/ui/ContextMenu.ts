@@ -57,7 +57,7 @@ export function showContextMenu(
     menuItem.textContent = item.label;
     menuItem.style.padding = '8px 16px';
     menuItem.style.borderRadius = '4px';
-    menuItem.style.margin = '0 4px';
+    menuItem.style.margin = '0';
 
     if (item.disabled) {
       menuItem.style.color = '#999';
