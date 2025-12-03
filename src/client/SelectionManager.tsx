@@ -351,12 +351,21 @@ export class SelectionManager {
     const isActuallyPureText = isPureStaticText(element);
     const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
+    // 获取文本内容：如果是静态文本，使用专门的方法获取；否则也返回内容（用于显示）
+    let textContent = '';
+    if (isStaticText) {
+      // 对于静态文本，使用专门的方法获取文本内容
+      textContent = this.getElementTextContent(element);
+    } else {
+      // 对于非静态文本，也返回内容（可能为空，但至少尝试获取）
+      textContent = element.innerText || element.textContent || '';
+    }
+
     // Note: elementId is not part of ElementInfo anymore
     return {
       tagName: element.tagName.toLowerCase(),
       className: element.className || '',
-      // Only return text content if element is marked as static content and is actually pure text
-      textContent: isStaticText ? this.getElementTextContent(element) : '',
+      textContent: textContent,
       sourceInfo,
       isStaticText: isStaticText || false, // 默认为 false
     };

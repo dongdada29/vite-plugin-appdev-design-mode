@@ -58,6 +58,7 @@ export interface ContentUpdatedMessage {
     sourceInfo: SourceInfo;
     oldValue: string;
     newValue: string;
+    realtime?: boolean; // 标记是否为实时更新
   };
   requestId?: string;
   timestamp?: number;

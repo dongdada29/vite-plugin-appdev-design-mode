@@ -24,6 +24,7 @@ import {
 import { bridge, messageValidator } from './bridge';
 import { AttributeNames } from './utils/attributeNames';
 import { isPureStaticText } from './utils/elementUtils';
+import { extractSourceInfo } from './utils/sourceInfo';
 
 export interface Modification {
   id: string;
@@ -341,16 +342,45 @@ export const DesignModeProvider: React.FC<{
           newClass
         );
 
-        // 应用样式更新
-        element.setAttribute('data-ignore-mutation', 'true');
-        element.className = newClass;
-        // Use setTimeout to ensure MutationObserver sees the attribute
-        setTimeout(() => {
-            element.removeAttribute('data-ignore-mutation');
-        }, 0);
+        // 查找所有具有相同 element-id 的元素（列表项同步）
+        const elementId = element.getAttribute(AttributeNames.elementId);
+        let relatedElements: HTMLElement[] = [element];
+        
+        if (elementId) {
+          // 使用 element-id 查找所有相同的列表项
+          const allElementsWithId = Array.from(
+            document.querySelectorAll(`[${AttributeNames.elementId}]`)
+          ) as HTMLElement[];
+          
+          relatedElements = allElementsWithId.filter(el => {
+            const elId = el.getAttribute(AttributeNames.elementId);
+            return elId === elementId;
+          });
+          
+          console.log(
+            '[DesignMode] Found',
+            relatedElements.length,
+            'related elements with same element-id:',
+            elementId
+          );
+        } else {
+          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
+        }
+
+        // 应用样式更新到所有相关元素（列表项同步）
+        relatedElements.forEach(el => {
+          el.setAttribute('data-ignore-mutation', 'true');
+          el.className = newClass;
+          // Use setTimeout to ensure MutationObserver sees the attribute
+          setTimeout(() => {
+            el.removeAttribute('data-ignore-mutation');
+          }, 0);
+        });
 
         console.log(
-          '[DesignMode] Applied new class to element:',
+          '[DesignMode] Applied new class to',
+          relatedElements.length,
+          'element(s):',
           element.className
         );
 
@@ -497,16 +527,45 @@ export const DesignModeProvider: React.FC<{
           newContent
         );
 
-        // 应用内容更新
-        element.setAttribute('data-ignore-mutation', 'true');
-        element.innerText = newContent;
-        // Use setTimeout to ensure MutationObserver sees the attribute
-        setTimeout(() => {
-            element.removeAttribute('data-ignore-mutation');
-        }, 0);
+        // 查找所有具有相同 element-id 的元素（列表项同步）
+        const elementId = element.getAttribute(AttributeNames.elementId);
+        let relatedElements: HTMLElement[] = [element];
+        
+        if (elementId) {
+          // 使用 element-id 查找所有相同的列表项
+          const allElementsWithId = Array.from(
+            document.querySelectorAll(`[${AttributeNames.elementId}]`)
+          ) as HTMLElement[];
+          
+          relatedElements = allElementsWithId.filter(el => {
+            const elId = el.getAttribute(AttributeNames.elementId);
+            return elId === elementId;
+          });
+          
+          console.log(
+            '[DesignMode] Found',
+            relatedElements.length,
+            'related elements with same element-id:',
+            elementId
+          );
+        } else {
+          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
+        }
+
+        // 应用内容更新到所有相关元素（列表项同步）
+        relatedElements.forEach(el => {
+          el.setAttribute('data-ignore-mutation', 'true');
+          el.innerText = newContent;
+          // Use setTimeout to ensure MutationObserver sees the attribute
+          setTimeout(() => {
+            el.removeAttribute('data-ignore-mutation');
+          }, 0);
+        });
 
         console.log(
-          '[DesignMode] Applied new content to element:',
+          '[DesignMode] Applied new content to',
+          relatedElements.length,
+          'element(s)',
           element.innerText
         );
 
@@ -685,10 +744,20 @@ export const DesignModeProvider: React.FC<{
             const isActuallyPureText = isPureStaticText(element);
             const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
+            // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
+            let textContent = '';
+            if (isStaticText) {
+              // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
+              textContent = element.textContent || element.innerText || '';
+            } else {
+              // 对于非静态文本，也返回内容（可能为空）
+              textContent = element.innerText || element.textContent || '';
+            }
+
             const elementInfo: ElementInfo = {
               tagName: element.tagName.toLowerCase(),
               className: element.className,
-              textContent: element.innerText || element.textContent || '',
+              textContent: textContent,
               sourceInfo: {
                 fileName: sourceInfo.fileName,
                 lineNumber: sourceInfo.lineNumber,
