@@ -18,6 +18,7 @@ const VITE_CONFIG_FILES = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs'
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  packageManager?: string;
 }
 
 /**
@@ -42,15 +43,70 @@ function hasReact(packageJson: PackageJson): boolean {
 
 /**
  * 检测项目使用的包管理器
+ * 优先级：
+ * 1. package.json 中的 packageManager 字段（npm 7+ / pnpm 7+ / yarn 2+）
+ * 2. 环境变量（PNPM_HOME, YARN_* 等）
+ * 3. 检查 lock 文件
+ * 4. 检查哪个包管理器命令可用
+ * 5. 默认使用 npm
  */
 function detectPackageManager(): 'npm' | 'pnpm' | 'yarn' {
+  const packageJsonPath = join(process.cwd(), 'package.json');
+  
+  // 1. 检查 package.json 中的 packageManager 字段（最高优先级）
+  if (existsSync(packageJsonPath)) {
+    try {
+      const packageJson: PackageJson & { packageManager?: string } = JSON.parse(
+        readFileSync(packageJsonPath, 'utf-8')
+      );
+      if (packageJson.packageManager) {
+        const pm = packageJson.packageManager.split('@')[0];
+        if (pm === 'pnpm' || pm === 'yarn' || pm === 'npm') {
+          return pm as 'npm' | 'pnpm' | 'yarn';
+        }
+      }
+    } catch (e) {
+      // 忽略解析错误，继续其他检测方法
+    }
+  }
+  
+  // 2. 检查环境变量（检测当前运行环境）
+  // 如果通过 pnpm dlx 运行，会有相关环境变量
+  if (process.env.PNPM_HOME || process.env.pnpm_execpath || process.env.npm_config_user_agent?.includes('pnpm')) {
+    return 'pnpm';
+  }
+  if (process.env.YARN_VERSION || process.env.npm_config_user_agent?.includes('yarn')) {
+    return 'yarn';
+  }
+  
+  // 3. 检查 lock 文件
   if (existsSync(join(process.cwd(), 'pnpm-lock.yaml'))) {
     return 'pnpm';
   }
   if (existsSync(join(process.cwd(), 'yarn.lock'))) {
     return 'yarn';
   }
-  return 'npm';
+  if (existsSync(join(process.cwd(), 'package-lock.json'))) {
+    return 'npm';
+  }
+  
+  // 4. 尝试检测哪个包管理器命令可用
+  try {
+    execSync('pnpm --version', { stdio: 'ignore', cwd: process.cwd() });
+    return 'pnpm';
+  } catch (e) {
+    // pnpm 不可用，继续检查
+  }
+  
+  try {
+    execSync('yarn --version', { stdio: 'ignore', cwd: process.cwd() });
+    return 'yarn';
+  } catch (e) {
+    // yarn 不可用，继续检查
+  }
+  
+  // 5. 默认使用 pnpm
+  return 'pnpm';
 }
 
 /**
@@ -284,14 +340,18 @@ function installOrUpgradePlugin(packageManager: 'npm' | 'pnpm' | 'yarn', isInsta
   console.log(`执行命令: ${commands[packageManager]}\n`);
   
   try {
-    // 设置环境变量，优化 npm 执行环境
+    // 根据包管理器设置相应的环境变量
     const env = {
       ...process.env,
+    } as NodeJS.ProcessEnv;
+    
+    // 仅对 npm 设置 NPM_CONFIG_* 环境变量
+    if (packageManager === 'npm') {
       // 禁用 npm 的进度条，可能有助于避免某些内部错误
-      NPM_CONFIG_PROGRESS: 'false',
+      env.NPM_CONFIG_PROGRESS = 'false';
       // 使用标准输出模式，避免某些 npm 版本的问题
-      NPM_CONFIG_COLOR: 'false',
-    };
+      env.NPM_CONFIG_COLOR = 'false';
+    }
     
     execSync(commands[packageManager], { 
       stdio: 'inherit',
