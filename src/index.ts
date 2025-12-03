@@ -54,7 +54,7 @@ export interface DesignModeOptions {
 const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
   enabled: true,
   enableInProduction: false,
-  attributePrefix: 'data-__xagi',
+  attributePrefix: 'data-xagi',
   verbose: true,
   exclude: ['node_modules', 'dist'],
   include: ['src/**/*.{ts,js,tsx,jsx}'],
@@ -115,6 +115,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       if (!isPluginEnabled()) {
         return null;
       }
+
       if (id === RESOLVED_VIRTUAL_CLIENT_MODULE_ID) {
         const clientEntryPath = resolveClientEntryPath();
         if (!existsSync(clientEntryPath)) {
@@ -138,6 +139,28 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
         return rewrittenCode;
       }
+
+      // **NEW: Process tsx/jsx files in load hook BEFORE React plugin**
+      // This allows us to add attributes to JSX elements before they are compiled
+      const shouldProcess = shouldProcessFile(id, options);
+
+      if (shouldProcess) {
+        try {
+          // Read the original file content
+          const code = readFileSync(id, 'utf-8');
+
+          // Transform the code to add data attributes
+          const transformedCode = transformSourceCode(code, id, options);
+
+          // Return the transformed code
+          // React plugin will then process this code to compile JSX
+          return transformedCode;
+        } catch (error) {
+          // Return null to let other plugins handle it
+          return null;
+        }
+      }
+
       return null;
     },
 
@@ -343,23 +366,15 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
       // 检查文件是否应该被处理
       const shouldProcess = shouldProcessFile(id, options);
-      if (options.verbose) {
-        console.log(`[appdev-design-mode] Processing ${id}: ${shouldProcess}`);
-      }
 
       if (!shouldProcess) {
         return code;
       }
 
       try {
-        return transformSourceCode(code, id, options);
+        const transformedCode = transformSourceCode(code, id, options);
+        return transformedCode;
       } catch (error) {
-        if (options.verbose) {
-          console.warn(
-            `[appdev-design-mode] Failed to transform ${id}:`,
-            error
-          );
-        }
         return code;
       }
     },
@@ -400,6 +415,8 @@ function shouldProcessFile(
     let regex = pattern;
 
     // 1. Replace glob syntax with placeholders
+    // IMPORTANT: Replace **/ as a unit first to avoid double slashes
+    regex = regex.replace(/\*\*\//g, '%%GLOBSTAR_SLASH%%');
     regex = regex.replace(/\*\*/g, '%%GLOBSTAR%%');
     regex = regex.replace(/\*/g, '%%WILDCARD%%');
     regex = regex.replace(/\{([^}]+)\}/g, (_, group) =>
@@ -410,6 +427,9 @@ function shouldProcessFile(
     regex = regex.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
 
     // 3. Restore placeholders with regex equivalents
+    // **/ matches zero or more path segments (e.g., "", "foo/", "foo/bar/")
+    regex = regex.replace(/%%GLOBSTAR_SLASH%%/g, '(([^/]+/)*)');
+    // ** alone (rare) matches any characters
     regex = regex.replace(/%%GLOBSTAR%%/g, '.*');
     regex = regex.replace(/%%WILDCARD%%/g, '[^/]*');
     regex = regex.replace(/%%BRACE_START%%/g, '(');
@@ -424,7 +444,6 @@ function shouldProcessFile(
     }
 
     const re = new RegExp(regex + '$'); // Anchor to end
-
     return re.test(filePath);
   });
 
