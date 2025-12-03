@@ -32,12 +32,13 @@ export function showContextMenu(
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
   menu.style.background = 'white';
-  menu.style.border = '1px solid #ccc';
-  menu.style.borderRadius = '4px';
-  menu.style.padding = '4px 0';
+  menu.style.border = '0.5px solid #ccc';
+  menu.style.borderRadius = '6px';
+  menu.style.padding = '0';
   menu.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
   menu.style.zIndex = '10000';
   menu.style.minWidth = '150px';
+  menu.style.fontSize = '14px';
 
   // Create menu items
   menuItems.forEach(item => {
@@ -55,6 +56,8 @@ export function showContextMenu(
     const menuItem = document.createElement('div');
     menuItem.textContent = item.label;
     menuItem.style.padding = '8px 16px';
+    menuItem.style.borderRadius = '4px';
+    menuItem.style.margin = '0 4px';
 
     if (item.disabled) {
       menuItem.style.color = '#999';

@@ -306,7 +306,7 @@ export class UpdateManager {
     // 添加其他菜单项（移除了选中/取消选中逻辑）
     menuItems.push(
       {
-        label: '添加到传话',
+        label: '添加到会话',
         action: () => this.addToChat(element),
       },
       {
