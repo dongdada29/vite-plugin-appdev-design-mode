@@ -34,8 +34,10 @@ export default defineConfig({
     },
     // <!-- DEV-INJECT-END -->
 
+    // IMPORTANT: appdevDesignMode must come BEFORE react plugin
+    // so it can transform JSX before React plugin processes it
+    appdevDesignMode(),
     react(),
-    appdevDesignMode()
   ],
   resolve: {
     alias: {
