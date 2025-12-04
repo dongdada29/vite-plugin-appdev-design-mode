@@ -106,9 +106,12 @@ export class UpdateManager {
 
   /**
    * 处理双击事件
-   * 注意：此方法在 design 模式和非 design 模式下都可以工作
+   * 注意：只有在 design 模式开启后才能双击进入编辑
    */
   private handleDblClick(event: MouseEvent) {
+    // 检查 design 模式是否开启（必须条件）
+    if (!this.isDesignMode) return;
+
     const target = event.target as HTMLElement;
     
     // 检查元素是否有源码映射（可编辑的前提条件）
@@ -138,7 +141,7 @@ export class UpdateManager {
     //   return;
     // }
 
-    // 进入编辑模式（在 design 模式和非 design 模式下都可以）
+    // 进入编辑模式（仅在 design 模式下）
     this.editManager.handleDirectEdit(target, 'content');
   }
 
