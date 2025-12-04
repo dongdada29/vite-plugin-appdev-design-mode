@@ -3,6 +3,7 @@ import { useDesignMode } from './DesignModeContext';
 import { SourceInfo, AddToChatMessage, CopyElementMessage } from '../types/messages';
 import { extractSourceInfo, hasSourceMapping } from './utils/sourceInfo';
 import { isPureStaticText } from './utils/elementUtils';
+import { AttributeNames } from './utils/attributeNames';
 import { showContextMenu, MenuItem } from './ui/ContextMenu';
 import { UpdateOperation, UpdateState, UpdateResult, BatchUpdateItem, UpdateManagerConfig } from './types/UpdateTypes';
 import { HistoryManager } from './managers/HistoryManager';
@@ -105,10 +106,27 @@ export class UpdateManager {
 
   /**
    * 处理双击事件
+   * 注意：此方法在 design 模式和非 design 模式下都可以工作
    */
   private handleDblClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
+    
+    // 检查元素是否有源码映射（可编辑的前提条件）
     if (!hasSourceMapping(target)) return;
+
+    // 排除设计模式 UI 元素
+    if (target.closest('#__vite_plugin_design_mode__')) return;
+    
+    // 排除右键菜单
+    if (target.closest(`[${AttributeNames.contextMenu}="true"]`)) return;
+
+    // 检查元素是否有 static-content 属性且值为 'true'（必须条件）
+    // 使用 AttributeNames.staticContent 来获取正确的属性名（支持可配置前缀，如 data-xagi-static-content）
+    const staticContentAttr = target.getAttribute(AttributeNames.staticContent);
+    if (staticContentAttr !== 'true') {
+      // 如果 static-content 属性不存在或值不为 'true'，不允许编辑
+      return;
+    }
 
     // 防止默认行为
     event.preventDefault();
@@ -120,7 +138,7 @@ export class UpdateManager {
     //   return;
     // }
 
-    // 进入编辑模式
+    // 进入编辑模式（在 design 模式和非 design 模式下都可以）
     this.editManager.handleDirectEdit(target, 'content');
   }
 
@@ -134,7 +152,7 @@ export class UpdateManager {
     if (!this.isDesignMode) return;
 
     // Exclude context menu
-    if (target.closest('[data-context-menu="true"]')) return;
+    if (target.closest(`[${AttributeNames.contextMenu}="true"]`)) return;
 
     // 检查元素是否有源码映射（可被选中）
     if (!hasSourceMapping(target)) return;
@@ -146,7 +164,7 @@ export class UpdateManager {
     const hadHoverState = target.hasAttribute('data-design-hover');
     if (hadHoverState) {
       // 添加标记，表示这是右键菜单保持的 hover 状态
-      target.setAttribute('data-context-menu-hover', 'true');
+      target.setAttribute(AttributeNames.contextMenuHover, 'true');
       // 确保 hover 状态保持
       target.setAttribute('data-design-hover', 'true');
     }
@@ -170,6 +188,14 @@ export class UpdateManager {
     if (selectElementCallback) {
       this.selectElementCallback = selectElementCallback;
     }
+  }
+
+  /**
+   * 获取当前 design 模式是否开启
+   * @returns true 如果 design 模式已开启，否则返回 false
+   */
+  public getDesignModeState(): boolean {
+    return this.isDesignMode;
   }
 
 
@@ -721,6 +747,8 @@ export const useUpdateManager = (config?: Partial<UpdateManagerConfig>) => {
   const { config: designModeConfig, isDesignMode, selectedElement } = useDesignMode();
 
   React.useEffect(() => {
+    // 确保在非 design 模式下也能启用双击编辑功能
+    // enableDirectEdit 默认为 true，允许在非 design 模式下也能双击编辑
     updateManagerRef.current = new UpdateManager({
       enableDirectEdit: designModeConfig.iframeMode?.enableDirectEdit ?? true,
       enableBatching: designModeConfig.batchUpdate?.enabled ?? true,

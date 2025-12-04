@@ -91,6 +91,12 @@ export const AttributeNames = {
   get staticContent() {
     return getAttributeName('static-content');
   },
+  get contextMenu() {
+    return getAttributeName('context-menu');
+  },
+  get contextMenuHover() {
+    return getAttributeName('context-menu-hover');
+  },
 } as const;
 
 /**

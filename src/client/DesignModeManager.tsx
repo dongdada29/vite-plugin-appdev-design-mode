@@ -26,7 +26,7 @@ export const DesignModeManager: React.FC = () => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
 
       // Don't handle clicks on context menu
-      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
+      if ((e.target as HTMLElement).closest(`[${AttributeNames.contextMenu}="true"]`)) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -40,7 +40,7 @@ export const DesignModeManager: React.FC = () => {
     /*
     const handleDoubleClick = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
-      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
+      if ((e.target as HTMLElement).closest(`[${AttributeNames.contextMenu}="true"]`)) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -134,7 +134,7 @@ export const DesignModeManager: React.FC = () => {
 
     const handleMouseOver = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
-      if ((e.target as HTMLElement).closest('[data-context-menu="true"]')) return;
+      if ((e.target as HTMLElement).closest(`[${AttributeNames.contextMenu}="true"]`)) return;
 
       const target = e.target as HTMLElement;
       target.setAttribute('data-design-hover', 'true');
@@ -143,7 +143,7 @@ export const DesignModeManager: React.FC = () => {
     const handleMouseOut = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       // 如果元素有右键菜单保持的 hover 状态，不要移除它
-      if (!target.hasAttribute('data-context-menu-hover')) {
+      if (!target.hasAttribute(AttributeNames.contextMenuHover)) {
         target.removeAttribute('data-design-hover');
       }
     };

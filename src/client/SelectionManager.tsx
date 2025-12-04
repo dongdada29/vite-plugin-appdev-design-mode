@@ -62,9 +62,11 @@ export class SelectionManager {
       this.container.addEventListener('mouseleave', this.handleMouseLeave.bind(this), true);
     }
 
-    // 键盘事件处理
-    document.addEventListener('keydown', this.handleKeyDown.bind(this));
-    document.addEventListener('keyup', this.handleKeyUp.bind(this));
+    // 键盘事件处理（仅在 enableSelection 为 true 时注册）
+    if (this.config.enableSelection) {
+      document.addEventListener('keydown', this.handleKeyDown.bind(this));
+      document.addEventListener('keyup', this.handleKeyUp.bind(this));
+    }
   }
 
   /**
@@ -183,7 +185,7 @@ export class SelectionManager {
     if (!element || !element.tagName) return false;
 
     // Exclude context menu
-    if (element.closest('[data-context-menu="true"]')) return false;
+    if (element.closest(`[${AttributeNames.contextMenu}="true"]`)) return false;
 
     // 检查是否在排除列表中
     for (const selector of this.config.excludeSelectors) {

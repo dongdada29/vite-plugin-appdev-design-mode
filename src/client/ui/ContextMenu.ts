@@ -1,5 +1,6 @@
 import { extractSourceInfo } from '../utils/sourceInfo';
 import { isPureStaticText } from '../utils/elementUtils';
+import { AttributeNames } from '../utils/attributeNames';
 
 export interface MenuItem {
   label: string;
@@ -17,17 +18,17 @@ export function showContextMenu(
   menuItems: MenuItem[]
 ): HTMLElement {
   // Remove existing menu
-  const existingMenu = document.querySelector('[data-context-menu="true"]') as HTMLElement;
+  const existingMenu = document.querySelector(`[${AttributeNames.contextMenu}="true"]`) as HTMLElement;
   if (existingMenu) {
     document.body.removeChild(existingMenu);
   }
 
   // 检查元素是否有右键菜单保持的 hover 状态
-  const hadHoverState = element.hasAttribute('data-context-menu-hover');
+  const hadHoverState = element.hasAttribute(AttributeNames.contextMenuHover);
 
   // Create context menu
   const menu = document.createElement('div');
-  menu.setAttribute('data-context-menu', 'true');
+  menu.setAttribute(AttributeNames.contextMenu, 'true');
   menu.style.position = 'fixed';
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
@@ -133,7 +134,7 @@ export function closeContextMenu(menu: HTMLElement) {
   // 如果之前有 hover 状态，检查鼠标是否还在元素上
   if (targetElement && hadHoverState) {
     // 移除右键菜单保持的标记
-    targetElement.removeAttribute('data-context-menu-hover');
+    targetElement.removeAttribute(AttributeNames.contextMenuHover);
 
     // 使用 setTimeout 确保在 mouseout 事件处理之后执行
     setTimeout(() => {
