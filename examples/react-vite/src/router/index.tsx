@@ -1,5 +1,54 @@
-import { createHashRouter, Link } from 'react-router-dom';
+import { createHashRouter, Link, Outlet, useLocation } from 'react-router-dom';
 import Home from '@/pages/Home';
+import IframeDemoPage from '@/pages/IframeDemoPage';
+
+/**
+ * 布局组件
+ * 包含导航栏和页面内容区域
+ */
+function Layout() {
+  const location = useLocation();
+
+  return (
+    <div className='min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100'>
+      {/* 导航栏 */}
+      <nav className='bg-white shadow-md'>
+        <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
+          <div className='flex justify-between h-16'>
+            <div className='flex items-center'>
+              <h1 className='text-2xl font-bold text-indigo-600'>设计模式演示</h1>
+            </div>
+            <div className='flex items-center space-x-4'>
+              <Link
+                to='/'
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === '/'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                首页
+              </Link>
+              <Link
+                to='/iframe-demo'
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === '/iframe-demo'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                Iframe 演示
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* 页面内容 */}
+      <main>
+        <Outlet />
+      </main>
+    </div>
+  );
+}
 
 /**
  * 404 页面组件
@@ -44,7 +93,17 @@ function NotFound() {
 export const router = createHashRouter([
   {
     path: '/',
-    element: <Home />,
+    element: <Layout />,
+    children: [
+      {
+        path: '/',
+        element: <Home />,
+      },
+      {
+        path: '/iframe-demo',
+        element: <IframeDemoPage />,
+      },
+    ],
   },
   {
     path: '*',
