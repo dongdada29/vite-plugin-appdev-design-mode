@@ -340,20 +340,21 @@ export const DesignModeProvider: React.FC<{
         if (selectedElement === element) {
           setSelectedElement(element);
         }
-
-        // 更新源码 - 使用 DesignModeApi
-        try {
-          await DesignModeApi.updateSource({
-            filePath: sourceInfo.fileName,
-            line: sourceInfo.lineNumber,
-            column: sourceInfo.columnNumber,
-            newValue: newClass,
-            type: 'style',
-            originalValue: oldClass,
-          });
-        } catch (error) {
-          console.error('[DesignMode] Error updating source:', error);
-          throw error;
+        if (updateMessage.payload.persist === true) {
+          // 更新源码 - 使用 DesignModeApi
+          try {
+            await DesignModeApi.updateSource({
+              filePath: sourceInfo.fileName,
+              line: sourceInfo.lineNumber,
+              column: sourceInfo.columnNumber,
+              newValue: newClass,
+              type: 'style',
+              originalValue: oldClass,
+            });
+          } catch (error) {
+            console.error('[DesignMode] Error updating source:', error);
+            throw error;
+          }
         }
 
         // 发送更新完成消息
@@ -462,8 +463,8 @@ export const DesignModeProvider: React.FC<{
           setSelectedElement(element);
         }
 
-        // 只有在 persist 为 true (默认) 时才更新源码
-        if (updateMessage.payload.persist !== false) {
+        // 只有在 persist 为 false (默认) 时才更新源码
+        if (updateMessage.payload.persist === true) {
           // 更新源码 - 使用 extractSourceInfo 获取源码信息
           const elementSourceInfo = extractSourceInfo(element);
           if (elementSourceInfo) {
@@ -558,7 +559,6 @@ export const DesignModeProvider: React.FC<{
               element.innerText = update.newValue;
               setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
             }
-
             await DesignModeApi.updateSource({
               filePath: update.sourceInfo.fileName,
               line: update.sourceInfo.lineNumber,
@@ -567,7 +567,6 @@ export const DesignModeProvider: React.FC<{
               type: update.type,
               originalValue: update.originalValue,
             });
-
             return { success: true, sourceInfo: update.sourceInfo };
           })
         );
