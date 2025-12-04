@@ -64,6 +64,18 @@ export interface ContentUpdatedMessage {
   timestamp?: number;
 }
 
+export interface ContentUpdatedCallbackMessage {
+  type: 'CONTENT_UPDATED_CALLBACK';
+  payload: {
+    sourceInfo: SourceInfo;
+    oldValue: string;
+    newValue: string;
+    realtime?: boolean; // 标记是否为实时更新
+  };
+  requestId?: string;
+  timestamp?: number;
+}
+
 export interface StyleUpdatedMessage {
   type: 'STYLE_UPDATED';
   payload: {
@@ -230,8 +242,9 @@ export type IframeToParentMessage =
   | HealthCheckResponseMessage
   | BridgeReadyMessage
   | AddToChatMessage
-  | CopyElementMessage;
-
+  | CopyElementMessage
+  | ContentUpdatedCallbackMessage;
+  
 export type ParentToIframeMessage =
   | ToggleDesignModeMessage
   | UpdateStyleMessage

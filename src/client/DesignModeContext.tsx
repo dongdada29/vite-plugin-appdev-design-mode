@@ -532,7 +532,7 @@ export const DesignModeProvider: React.FC<{
 
         // 发送更新完成消息
         sendToParent({
-          type: 'CONTENT_UPDATED',
+          type: 'CONTENT_UPDATED_CALLBACK',
           payload: {
             sourceInfo,
             oldValue: originalContent,
