@@ -23,8 +23,13 @@ import {
 } from '../types/messages';
 import { bridge, messageValidator } from './bridge';
 import { AttributeNames } from './utils/attributeNames';
-import { isPureStaticText } from './utils/elementUtils';
-import { extractSourceInfo } from './utils/sourceInfo';
+import {
+  findElementBySourceInfo,
+  findAllElementsWithSameSource,
+  extractSourceInfo,
+  extractElementInfo
+} from './utils/domUtils';
+import { DesignModeApi } from './services/DesignModeApi';
 
 export interface Modification {
   id: string;
@@ -289,19 +294,12 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
+        const element = findElementBySourceInfo(sourceInfo);
 
-        const element = document.querySelector(selector) as HTMLElement;
         if (!element) {
           console.error(
             '[DesignMode] Element not found for sourceInfo:',
-            sourceInfo,
-            'Selector:',
-            selector
-          );
-          // 尝试查找所有带有 file 属性的元素
-          const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            sourceInfo
           );
 
           sendToParent({
@@ -309,7 +307,7 @@ export const DesignModeProvider: React.FC<{
             payload: {
               code: 'ELEMENT_NOT_FOUND',
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
-              details: { sourceInfo, selector },
+              details: { sourceInfo },
             },
             timestamp: Date.now(),
           });
@@ -319,22 +317,13 @@ export const DesignModeProvider: React.FC<{
         const oldClass = element.className;
 
         // 查找所有具有相同 element-id 的元素（列表项同步）
-        const elementId = element.getAttribute(AttributeNames.elementId);
-        let relatedElements: HTMLElement[] = [element];
-        
-        if (elementId) {
-          // 使用 element-id 查找所有相同的列表项
-          const allElementsWithId = Array.from(
-            document.querySelectorAll(`[${AttributeNames.elementId}]`)
-          ) as HTMLElement[];
-          
-          relatedElements = allElementsWithId.filter(el => {
-            const elId = el.getAttribute(AttributeNames.elementId);
-            return elId === elementId;
-          });
-        } else {
-          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
-        }
+        const relatedElements = findAllElementsWithSameSource(element);
+
+        console.log(
+          '[DesignMode] Found',
+          relatedElements.length,
+          'related elements to update'
+        );
 
         // 应用样式更新到所有相关元素（列表项同步）
         relatedElements.forEach(el => {
@@ -352,30 +341,20 @@ export const DesignModeProvider: React.FC<{
           setSelectedElement(element);
         }
 
-        // 更新源码 - 直接使用 sourceInfo
-        // try {
-        //   const response = await fetch('/__appdev_design_mode/update', {
-        //     method: 'POST',
-        //     headers: {
-        //       'Content-Type': 'application/json',
-        //     },
-        //     body: JSON.stringify({
-        //       filePath: sourceInfo.fileName,
-        //       line: sourceInfo.lineNumber,
-        //       column: sourceInfo.columnNumber,
-        //       newValue: newClass,
-        //       type: 'style',
-        //       originalValue: oldClass,
-        //     }),
-        //   });
-
-        //   if (!response.ok) {
-        //     throw new Error('Failed to update source');
-        //   }
-        // } catch (error) {
-        //   console.error('[DesignMode] Error updating source:', error);
-        //   throw error;
-        // }
+        // 更新源码 - 使用 DesignModeApi
+        try {
+          await DesignModeApi.updateSource({
+            filePath: sourceInfo.fileName,
+            line: sourceInfo.lineNumber,
+            column: sourceInfo.columnNumber,
+            newValue: newClass,
+            type: 'style',
+            originalValue: oldClass,
+          });
+        } catch (error) {
+          console.error('[DesignMode] Error updating source:', error);
+          throw error;
+        }
 
         // 发送更新完成消息
         sendToParent({
@@ -436,19 +415,12 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
+        const element = findElementBySourceInfo(sourceInfo);
 
-        const element = document.querySelector(selector) as HTMLElement;
         if (!element) {
           console.error(
             '[DesignMode] Element not found for sourceInfo:',
-            sourceInfo,
-            'Selector:',
-            selector
-          );
-          // 尝试查找所有带有 file 属性的元素
-          const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            sourceInfo
           );
 
           sendToParent({
@@ -456,7 +428,7 @@ export const DesignModeProvider: React.FC<{
             payload: {
               code: 'ELEMENT_NOT_FOUND',
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
-              details: { sourceInfo, selector },
+              details: { sourceInfo },
             },
             timestamp: Date.now(),
           });
@@ -466,22 +438,13 @@ export const DesignModeProvider: React.FC<{
         const originalContent = element.innerText || element.textContent || '';
 
         // 查找所有具有相同 element-id 的元素（列表项同步）
-        const elementId = element.getAttribute(AttributeNames.elementId);
-        let relatedElements: HTMLElement[] = [element];
-        
-        if (elementId) {
-          // 使用 element-id 查找所有相同的列表项
-          const allElementsWithId = Array.from(
-            document.querySelectorAll(`[${AttributeNames.elementId}]`)
-          ) as HTMLElement[];
-          
-          relatedElements = allElementsWithId.filter(el => {
-            const elId = el.getAttribute(AttributeNames.elementId);
-            return elId === elementId;
-          });
-        } else {
-          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
-        }
+        const relatedElements = findAllElementsWithSameSource(element);
+
+        console.log(
+          '[DesignMode] Found',
+          relatedElements.length,
+          'related elements to update'
+        );
 
         // 应用内容更新到所有相关元素（列表项同步）
         relatedElements.forEach(el => {
@@ -500,35 +463,25 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 只有在 persist 为 true (默认) 时才更新源码
-        // if (updateMessage.payload.persist !== false) {
-        //   // 更新源码 - 使用 extractSourceInfo 获取源码信息
-        //   const elementSourceInfo = extractSourceInfo(element);
-        //   if (elementSourceInfo) {
-        //     try {
-        //       const response = await fetch('/__appdev_design_mode/update', {
-        //         method: 'POST',
-        //         headers: {
-        //           'Content-Type': 'application/json',
-        //         },
-        //         body: JSON.stringify({
-        //           filePath: elementSourceInfo.fileName,
-        //           line: elementSourceInfo.lineNumber,
-        //           column: elementSourceInfo.columnNumber,
-        //           newValue: newContent,
-        //           type: 'content',
-        //           originalValue: originalContent,
-        //         }),
-        //       });
-
-        //       if (!response.ok) {
-        //         throw new Error('Failed to update source');
-        //       }
-        //     } catch (error) {
-        //       console.error('[DesignMode] Error updating source:', error);
-        //       throw error;
-        //     }
-        //   }
-        // }
+        if (updateMessage.payload.persist !== false) {
+          // 更新源码 - 使用 extractSourceInfo 获取源码信息
+          const elementSourceInfo = extractSourceInfo(element);
+          if (elementSourceInfo) {
+            try {
+              await DesignModeApi.updateSource({
+                filePath: elementSourceInfo.fileName,
+                line: elementSourceInfo.lineNumber,
+                column: elementSourceInfo.columnNumber,
+                newValue: newContent,
+                type: 'content',
+                originalValue: originalContent,
+              });
+            } catch (error) {
+              console.error('[DesignMode] Error updating source:', error);
+              throw error;
+            }
+          }
+        }
 
         // 发送更新完成消息
         sendToParent({
@@ -606,12 +559,14 @@ export const DesignModeProvider: React.FC<{
               setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
             }
 
-            await updateSource(
-              element,
-              update.newValue,
-              update.type,
-              update.originalValue
-            );
+            await DesignModeApi.updateSource({
+              filePath: update.sourceInfo.fileName,
+              line: update.sourceInfo.lineNumber,
+              column: update.sourceInfo.columnNumber,
+              newValue: update.newValue,
+              type: update.type,
+              originalValue: update.originalValue,
+            });
 
             return { success: true, sourceInfo: update.sourceInfo };
           })
@@ -636,17 +591,6 @@ export const DesignModeProvider: React.FC<{
   );
 
   /**
-   * 根据源码信息查找元素
-   */
-  const findElementBySourceInfo = useCallback(
-    (sourceInfo: SourceInfo): HTMLElement | null => {
-      const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-      return document.querySelector(selector) as HTMLElement;
-    },
-    []
-  );
-
-  /**
    * 元素选择处理
    */
   const selectElement = useCallback(
@@ -655,52 +599,19 @@ export const DesignModeProvider: React.FC<{
 
       // 发送选择信息到父窗口（仅在iframe环境下）
       if (element && config.iframeMode?.enabled) {
-        const sourceInfoStr = element.getAttribute(AttributeNames.info);
-        if (sourceInfoStr) {
-          try {
-            const sourceInfo = JSON.parse(sourceInfoStr);
+        // Use extractElementInfo from domUtils
+        const elementInfo = extractElementInfo(element);
 
-            // 判断是否为静态文本：
-            // 1. 检查元素是否有 static-content 属性
-            // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
-            const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
-            const isActuallyPureText = isPureStaticText(element);
-            const isStaticText = hasStaticContentAttr && isActuallyPureText;
+        if (elementInfo) {
+          sendToParent({
+            type: 'ELEMENT_SELECTED',
+            payload: { elementInfo },
+            timestamp: Date.now(),
+          });
 
-            // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
-            let textContent = '';
-            if (isStaticText) {
-              // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
-              textContent = element.textContent || element.innerText || '';
-            } else {
-              // 对于非静态文本，也返回内容（可能为空）
-              textContent = element.innerText || element.textContent || '';
-            }
-
-            const elementInfo: ElementInfo = {
-              tagName: element.tagName.toLowerCase(),
-              className: element.className,
-              textContent: textContent,
-              sourceInfo: {
-                fileName: sourceInfo.fileName,
-                lineNumber: sourceInfo.lineNumber,
-                columnNumber: sourceInfo.columnNumber,
-              },
-              isStaticText: isStaticText || false, // 默认为 false
-            };
-            
-            sendToParent({
-              type: 'ELEMENT_SELECTED',
-              payload: { elementInfo },
-              timestamp: Date.now(),
-            });
-
-          } catch (e) {
-            console.warn('Failed to parse source info:', e);
-          }
         } else {
           console.warn(
-            `[DesignMode] Element selected but missing ${AttributeNames.info} attribute:`,
+            `[DesignMode] Element selected but missing source info or invalid:`,
             element
           );
         }
@@ -720,137 +631,46 @@ export const DesignModeProvider: React.FC<{
   const toggleDesignMode = useCallback(() => {
     setIsDesignMode(prev => {
       const next = !prev;
-      if (!next) {
-        setSelectedElement(null);
+
+      if (window.self !== window.top) {
+        sendToParent({
+          type: 'DESIGN_MODE_CHANGED',
+          enabled: next,
+          timestamp: Date.now(),
+        });
       }
+
       return next;
     });
-  }, []);
+  }, [sendToParent]);
 
   /**
-   * 更新源码文件
-   */
-  const updateSource = useCallback(
-    async (
-      element: HTMLElement,
-      newValue: string,
-      type: 'style' | 'content',
-      originalValue?: string
-    ) => {
-      const sourceInfo = extractSourceInfo(element);
-      if (!sourceInfo) {
-        throw new Error('Element does not have source mapping data');
-      }
-
-      try {
-        const response = await fetch('/__appdev_design_mode/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filePath: sourceInfo.fileName,
-            line: sourceInfo.lineNumber,
-            column: sourceInfo.columnNumber,
-            newValue,
-            type,
-            originalValue,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update source');
-        }
-
-      } catch (error) {
-        console.error('[DesignMode] Error updating source:', error);
-        throw error;
-      }
-    },
-    []
-  );
-
-  /**
-   * 提取元素源码信息
-   */
-  const extractSourceInfo = useCallback(
-    (element: HTMLElement): SourceInfo | null => {
-      // 优先尝试从 info JSON 属性获取
-      const sourceInfoStr = element.getAttribute(AttributeNames.info);
-      if (sourceInfoStr) {
-        try {
-          const sourceInfo = JSON.parse(sourceInfoStr);
-          return {
-            fileName: sourceInfo.fileName,
-            lineNumber: sourceInfo.lineNumber,
-            columnNumber: sourceInfo.columnNumber,
-          };
-        } catch (e) {
-          console.warn(`Failed to parse ${AttributeNames.info}:`, e);
-        }
-      }
-
-      // 备用方案：逐个属性获取
-      const fileName = element.getAttribute(AttributeNames.file);
-      const lineStr = element.getAttribute(AttributeNames.line);
-      const columnStr = element.getAttribute(AttributeNames.column);
-
-      if (fileName && lineStr && columnStr) {
-        return {
-          fileName,
-          lineNumber: parseInt(lineStr, 10),
-          columnNumber: parseInt(columnStr, 10),
-        };
-      }
-
-      return null;
-    },
-    []
-  );
-
-  /**
-   * 修改元素样式
+   * 修改元素类名
    */
   const modifyElementClass = useCallback(
     async (element: HTMLElement, newClass: string) => {
-      const oldClasses = element.className;
-      const mergedClasses = twMerge(oldClasses, newClass);
-
-      // 更新DOM
-      element.className = mergedClasses;
-
-      // 更新源码
-      await updateSource(element, mergedClasses, 'style', oldClasses);
-
-      // 添加到修改历史
-      const modification: Modification = {
-        id: Date.now().toString(),
-        element: element.id || 'unknown',
-        type: 'class',
-        oldValue: oldClasses,
-        newValue: mergedClasses,
-        timestamp: Date.now(),
-      };
-
-      setModifications(prev => [modification, ...prev]);
-
-      // 如果在iframe中，发送更新消息
-      if (config.iframeMode?.enabled) {
-        const sourceInfo = extractSourceInfo(element);
-        if (sourceInfo) {
-          sendToParent({
-            type: 'STYLE_UPDATED',
-            payload: {
-              sourceInfo,
-              oldClass: oldClasses,
-              newClass: mergedClasses,
-            },
-            timestamp: Date.now(),
-          });
-        }
+      const sourceInfo = extractSourceInfo(element);
+      if (!sourceInfo) {
+        console.error('[DesignMode] Cannot modify class: no source info');
+        return;
       }
+
+      const oldClass = element.className;
+
+      // Update DOM
+      element.className = newClass;
+
+      // Update source
+      await DesignModeApi.updateSource({
+        filePath: sourceInfo.fileName,
+        line: sourceInfo.lineNumber,
+        column: sourceInfo.columnNumber,
+        newValue: newClass,
+        type: 'style',
+        originalValue: oldClass,
+      });
     },
-    [updateSource, config.iframeMode?.enabled]
+    []
   );
 
   /**
@@ -859,135 +679,61 @@ export const DesignModeProvider: React.FC<{
   const updateElementContent = useCallback(
     async (element: HTMLElement, newContent: string) => {
       const sourceInfo = extractSourceInfo(element);
+      if (!sourceInfo) {
+        console.error('[DesignMode] Cannot update content: no source info');
+        return;
+      }
+
       const originalContent = element.innerText;
 
-
-      // 更新DOM
+      // Update DOM
       element.innerText = newContent;
 
-      // 更新源码
-      await updateSource(element, newContent, 'content', originalContent);
-
-      // 如果在iframe中，发送更新消息
-      if (config.iframeMode?.enabled) {
-        const sourceInfo = extractSourceInfo(element);
-        if (sourceInfo) {
-          sendToParent({
-            type: 'CONTENT_UPDATED',
-            payload: {
-              sourceInfo,
-              oldValue: originalContent,
-              newValue: newContent,
-            },
-            timestamp: Date.now(),
-          });
-        }
-      }
+      // Update source
+      await DesignModeApi.updateSource({
+        filePath: sourceInfo.fileName,
+        line: sourceInfo.lineNumber,
+        column: sourceInfo.columnNumber,
+        newValue: newContent,
+        type: 'content',
+        originalValue: originalContent,
+      });
     },
-    [updateSource, config.iframeMode?.enabled]
+    []
   );
 
   /**
    * 批量更新元素
    */
   const batchUpdateElements = useCallback(
-    async (
-      updates: Array<{
-        element: HTMLElement;
-        type: 'style' | 'content';
-        newValue: string;
-        originalValue?: string;
-      }>
-    ) => {
-      if (!config.batchUpdate?.enabled) {
-        // 如果批量更新未启用，逐个处理
-        await Promise.all(
-          updates.map(update => {
-            if (update.type === 'style') {
-              return modifyElementClass(update.element, update.newValue);
-            } else {
-              return updateElementContent(update.element, update.newValue);
-            }
-          })
-        );
-        return;
-      }
-
-      // 批量更新模式
-      const newUpdates = [...pendingBatchUpdates, ...updates];
-      setPendingBatchUpdates(newUpdates);
-
-      // 清除之前的定时器
-      if (batchUpdateTimer) {
-        clearTimeout(batchUpdateTimer);
-      }
-
-      // 设置新的定时器
-      const timer = setTimeout(async () => {
-        try {
-          // 构建批量更新请求
-          const batchUpdateItems = newUpdates.map(update => {
-            const sourceInfo = extractSourceInfo(update.element);
-            if (!sourceInfo) {
-              throw new Error('Element missing source mapping');
-            }
-
-            return {
-              type: update.type,
-              sourceInfo,
-              newValue: update.newValue,
-              originalValue: update.originalValue,
-            };
-          });
-
-          // 如果在iframe环境中，发送批量更新请求到父窗口
-          if (config.iframeMode?.enabled) {
-            await bridge.send({
-              type: 'BATCH_UPDATE',
-              payload: { updates: batchUpdateItems },
-              timestamp: Date.now(),
-            });
-          } else {
-            // 在主窗口中，直接调用API
-            await fetch('/__appdev_design_mode/batch-update', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                updates: batchUpdateItems,
-              }),
-            });
-          }
-
-          // 清理批量更新队列
-          setPendingBatchUpdates([]);
-        } catch (error) {
-          console.error('[DesignMode] Batch update failed:', error);
-          setPendingBatchUpdates([]);
-          throw error;
+    async (updates: Array<{
+      element: HTMLElement;
+      type: 'style' | 'content';
+      newValue: string;
+      originalValue?: string;
+    }>) => {
+      // Implement batch update using DesignModeApi if needed, or loop
+      // For now, simple loop
+      for (const update of updates) {
+        if (update.type === 'style') {
+          await modifyElementClass(update.element, update.newValue);
+        } else {
+          await updateElementContent(update.element, update.newValue);
         }
-      }, config.batchUpdate.debounceMs);
-
-      setBatchUpdateTimer(timer);
+      }
     },
-    [
-      config.batchUpdate,
-      pendingBatchUpdates,
-      batchUpdateTimer,
-      config.iframeMode?.enabled,
-      modifyElementClass,
-      updateElementContent,
-    ]
+    [modifyElementClass, updateElementContent]
   );
 
   /**
-   * 重置所有修改
+   * 重置修改
    */
   const resetModifications = useCallback(() => {
-    window.location.reload();
+    setModifications([]);
   }, []);
 
   /**
-   * 发送消息到父窗口
+   * 发送消息
    */
   const sendMessage = useCallback(
     async <T extends DesignModeMessage>(message: T) => {
@@ -1005,11 +751,11 @@ export const DesignModeProvider: React.FC<{
     async <T extends DesignModeMessage, R extends DesignModeMessage>(
       message: T,
       responseType: R['type']
-    ): Promise<R> => {
+    ) => {
       if (config.iframeMode?.enabled) {
-        return await bridge.sendWithResponse(message, responseType);
+        return await bridge.sendWithResponse<T, R>(message, responseType);
       }
-      throw new Error('Iframe mode is not enabled');
+      throw new Error('Bridge not enabled');
     },
     [config.iframeMode?.enabled]
   );
@@ -1021,36 +767,29 @@ export const DesignModeProvider: React.FC<{
     if (config.iframeMode?.enabled) {
       return await bridge.healthCheck();
     }
-    return { status: 'healthy', details: { mode: 'standalone' } };
+    return { status: 'disabled' };
   }, [config.iframeMode?.enabled]);
 
+  const value: DesignModeContextType = {
+    isDesignMode,
+    selectedElement,
+    modifications,
+    isConnected,
+    bridgeStatus,
+    config,
+    toggleDesignMode,
+    selectElement,
+    modifyElementClass,
+    updateElementContent,
+    batchUpdateElements,
+    resetModifications,
+    sendMessage,
+    sendMessageWithResponse,
+    healthCheck,
+  };
+
   return (
-    <DesignModeContext.Provider
-      value={{
-        // 状态
-        isDesignMode,
-        selectedElement,
-        modifications,
-        isConnected,
-        bridgeStatus,
-
-        // 配置
-        config,
-
-        // 操作方法
-        toggleDesignMode,
-        selectElement,
-        modifyElementClass,
-        updateElementContent,
-        batchUpdateElements,
-        resetModifications,
-
-        // 桥接器方法
-        sendMessage,
-        sendMessageWithResponse,
-        healthCheck,
-      }}
-    >
+    <DesignModeContext.Provider value={value}>
       {children}
     </DesignModeContext.Provider>
   );

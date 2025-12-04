@@ -1,7 +1,6 @@
-import { UpdateState, UpdateResult, UpdateOperation, UpdateManagerConfig } from '../types/UpdateTypes';
+import { UpdateState, UpdateResult, UpdateManagerConfig } from '../types/UpdateTypes';
 import { SourceInfo } from '../../types/messages';
-import { extractSourceInfo, hasSourceMapping } from '../utils/sourceInfo';
-import { isPureStaticText } from '../utils/elementUtils';
+import { extractSourceInfo, findAllElementsWithSameSource } from '../utils/domUtils';
 import { AttributeNames } from '../utils/attributeNames';
 
 export class EditManager {
@@ -30,7 +29,6 @@ export class EditManager {
 
     // 保存原始文本和状态
     const originalText = element.innerText;
-    const originalContentEditable = element.contentEditable;
 
     // 设置 contentEditable 为 true（不修改其他样式）
     element.contentEditable = 'true';
@@ -65,8 +63,8 @@ export class EditManager {
       if (newText !== originalText.trim()) {
         element.innerText = newText;
 
-        // 同步更新所有相同列表项的内容（使用 element-id 查找）
-        const relatedElements = this.findAllElementsWithSameSource(element, sourceInfo);
+        // 同步更新所有相同列表项的内容
+        const relatedElements = findAllElementsWithSameSource(element);
         relatedElements.forEach(el => {
           if (el !== element) {
             el.innerText = newText;
@@ -107,8 +105,8 @@ export class EditManager {
     const handleInput = () => {
       const currentText = element.innerText.trim();
 
-      // 实时同步更新所有相同列表项的内容（使用 element-id 查找）
-      const relatedElements = this.findAllElementsWithSameSource(element, sourceInfo);
+      // 实时同步更新所有相同列表项的内容
+      const relatedElements = findAllElementsWithSameSource(element);
       relatedElements.forEach(el => {
         if (el !== element) {
           el.innerText = currentText;
@@ -124,7 +122,6 @@ export class EditManager {
       if (e.key === 'Enter') {
         if (e.ctrlKey || e.metaKey) {
           // Ctrl+Enter or Cmd+Enter: insert newline (allow default behavior)
-          // Don't prevent default - let the browser insert the newline
           return;
         } else {
           // Plain Enter: save and exit
@@ -150,10 +147,6 @@ export class EditManager {
 
   /**
    * Update content
-   * @param element - 要更新的元素
-   * @param newValue - 新值
-   * @param sourceInfo - 源代码信息（如果未提供，则从元素中提取）
-   * @param oldValue - 旧值（如果未提供，则从元素中获取）
    */
   public async updateContent(
     element: HTMLElement,
@@ -167,7 +160,7 @@ export class EditManager {
       throw new Error('Cannot update content: no source info available');
     }
 
-    // 如果没有提供 oldValue，从元素中获取（注意：此时元素可能已经更新）
+    // 如果没有提供 oldValue，从元素中获取
     const finalOldValue = oldValue ?? element.innerText;
 
     const update: UpdateState = {
@@ -184,8 +177,7 @@ export class EditManager {
     };
 
     // Find all elements with the same source and update them (for preview)
-    // 使用 element-id 来查找相同的元素（特别是列表项）
-    const relatedElements = this.findAllElementsWithSameSource(element, finalSourceInfo);
+    const relatedElements = findAllElementsWithSameSource(element);
     relatedElements.forEach(el => {
       if (el !== element) {
         el.innerText = newValue;
@@ -224,8 +216,7 @@ export class EditManager {
     };
 
     // Find all elements with the same source and update them (for preview)
-    // 使用 element-id 来查找相同的元素（特别是列表项）
-    const relatedElements = this.findAllElementsWithSameSource(element, finalSourceInfo);
+    const relatedElements = findAllElementsWithSameSource(element);
     relatedElements.forEach(el => {
       if (el !== element) {
         el.className = newClass;
@@ -239,9 +230,7 @@ export class EditManager {
    * Edit style (trigger UI)
    */
   public editStyle(element: HTMLElement) {
-    // console.log('[EditManager] Opening style editor for:', element);
-    // This is where we would trigger the UI
-    // For now, we can just log it or maybe trigger a class update if we had a UI
+    // Placeholder for UI trigger
   }
 
   /**
@@ -269,8 +258,7 @@ export class EditManager {
     };
 
     // Find all elements with the same source and update them (for preview)
-    // 使用 element-id 来查找相同的元素（特别是列表项）
-    const relatedElements = this.findAllElementsWithSameSource(element, sourceInfo);
+    const relatedElements = findAllElementsWithSameSource(element);
     relatedElements.forEach(el => {
       if (el !== element) {
         el.setAttribute(attributeName, newValue);
@@ -288,14 +276,14 @@ export class EditManager {
   }
 
   /**
-   * 生成唯一更新ID
+   * Generate unique update ID
    */
   private generateUpdateId(): string {
     return `update-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
   /**
-   * 通知内容变化（不保存到源文件，只发送消息）
+   * Notify content changed (no save to source, just message)
    */
   private notifyContentChanged(
     element: HTMLElement,
@@ -309,7 +297,6 @@ export class EditManager {
       return;
     }
 
-    // 发送消息到父窗口（如果在 iframe 中）
     if (window.self !== window.top) {
       window.parent.postMessage({
         type: 'CONTENT_UPDATED',
@@ -324,10 +311,10 @@ export class EditManager {
   }
 
   private lastRealtimeNotify: number = 0;
-  private readonly REALTIME_THROTTLE_MS = 300; // 节流间隔
+  private readonly REALTIME_THROTTLE_MS = 300;
 
   /**
-   * 实时通知内容变化（带节流）
+   * Realtime notify content changed (throttled)
    */
   private notifyContentChangedRealtime(
     element: HTMLElement,
@@ -337,7 +324,6 @@ export class EditManager {
   ): void {
     const now = Date.now();
 
-    // 节流：如果距离上次通知不足 300ms，则跳过
     if (now - this.lastRealtimeNotify < this.REALTIME_THROTTLE_MS) {
       return;
     }
@@ -349,7 +335,6 @@ export class EditManager {
       return;
     }
 
-    // 发送实时消息到父窗口
     if (window.self !== window.top) {
       window.parent.postMessage({
         type: 'CONTENT_UPDATED',
@@ -357,40 +342,12 @@ export class EditManager {
           sourceInfo: finalSourceInfo,
           oldValue: oldValue || '',
           newValue: newValue,
-          realtime: true, // 标记为实时更新
+          realtime: true,
         },
         timestamp: Date.now(),
       }, '*');
     }
   }
-
-  /**
-   * Find all elements with the same source info
-   * 使用 element-id 来查找相同的元素（特别是列表项）
-   * @param element - 要查找相同元素的参考元素
-   * @param sourceInfo - 源代码信息（可选，已废弃，保留用于兼容性）
-   */
-  private findAllElementsWithSameSource(element: HTMLElement, sourceInfo?: SourceInfo): HTMLElement[] {
-    // 使用 element-id 来查找相同的元素
-    // 所有元素都应该有 element-id 属性
-    const elementId = element.getAttribute(AttributeNames.elementId);
-    
-    if (!elementId) {
-      console.warn('[EditManager] Element missing element-id attribute:', element);
-      return [element]; // 如果没有 element-id，只返回当前元素
-    }
-
-    // 使用 element-id 查找所有具有相同 element-id 的元素
-    // 注意：由于 element-id 可能包含特殊字符（如冒号），我们需要使用更安全的方式
-    // 遍历所有具有 element-id 属性的元素，然后比较值
-    const allElementsWithId = Array.from(
-      document.querySelectorAll(`[${AttributeNames.elementId}]`)
-    ) as HTMLElement[];
-    
-    return allElementsWithId.filter(el => {
-      const elId = el.getAttribute(AttributeNames.elementId);
-      return elId === elementId;
-    });
-  }
 }
+
 

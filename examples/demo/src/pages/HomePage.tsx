@@ -59,7 +59,7 @@ export default function HomePage() {
         3111
         <div className="space-y-4">
           <div className="p-6 bg-blue-50 rounded-lg border-2 border-blue-200">
-            <h3 className="text-xl font-semibold text-blue-900 mb-2">可编辑卡片</h3>
+            <h3 className="text-xl font-semibold text-blue-900 mb-2">可编辑卡片 1212</h3>
             <p className="text-blue-700 bg-blue-100 bg-red-100">
               这是一个可编辑的段落。在设计模式下试着点击它！
             </p>
@@ -101,7 +101,7 @@ export default function HomePage() {
                     <span className='text-sm text-gray-700 truncate'>
                       "{prompt.text}"
                     </span>
-                    <p>这量个相同的文本</p>
+                    <p>这量个相同的文本 1212</p>
                   </div>
                 </div>
               </div>
