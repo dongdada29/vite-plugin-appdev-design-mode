@@ -46,6 +46,23 @@ export interface ElementModifyResponse {
   sourceInfo: SourceMappingInfo;
 }
 
+// Tailwind Design Config Types
+export interface TailwindDesignConfig {
+  colors: Record<string, any>;
+  fontSize: Record<string, any>;
+  spacing: Record<string, any>;
+  borderRadius: Record<string, any>;
+  boxShadow: Record<string, any>;
+  fontWeight: Record<string, any>;
+  screens: Record<string, any>;
+}
+
+// Virtual Module Type Declaration
+declare module 'virtual:tailwind-config' {
+  const config: TailwindDesignConfig;
+  export default config;
+}
+
 // Type declaration for module exports
 declare const _default: (options?: DesignModeOptions) => Plugin;
 

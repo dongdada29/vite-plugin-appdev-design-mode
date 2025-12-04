@@ -10,15 +10,16 @@ export default defineConfig({
     },
     rollupOptions: {
       external: [
-        'vite', 
-        '@babel/core', 
-        '@babel/traverse', 
+        'vite',
+        '@babel/core',
+        '@babel/traverse',
         '@babel/types',
-        '@babel/standalone', // 外部依赖，不打包进代码
+        '@babel/standalone',
         'url',
         'path',
         'fs',
-        'http'
+        'http',
+        'tailwindcss/resolveConfig'
       ],
       output: {
         globals: {

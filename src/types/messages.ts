@@ -161,6 +161,30 @@ export interface CopyElementMessage {
   timestamp?: number;
 }
 
+// Tailwind Config Message Types
+export interface TailwindPanelConfig {
+  borderWidth: Record<string, number>;
+  borderStyle: Record<string, string>;
+  colors: Record<string, Record<string, string>>;
+  fontSize: Record<string, string>;
+  fontWeight: Record<string, string>;
+  letterSpacing: Record<string, string>;
+  lineHeight: Record<string, string>;
+  opacity: Record<string, number>;
+  borderRadius: Record<string, string>;
+  boxShadow: Record<string, string>;
+  spacing: Record<string, number>;
+}
+
+export interface TailwindConfigMessage {
+  type: 'TAILWIND_CONFIG';
+  payload: {
+    config: TailwindPanelConfig;
+  };
+  requestId?: string;
+  timestamp?: number;
+}
+
 // 新增：错误处理消息
 export interface ErrorMessage {
   type: 'ERROR';
@@ -230,7 +254,8 @@ export type IframeToParentMessage =
   | HealthCheckResponseMessage
   | BridgeReadyMessage
   | AddToChatMessage
-  | CopyElementMessage;
+  | CopyElementMessage
+  | TailwindConfigMessage;
 
 export type ParentToIframeMessage =
   | ToggleDesignModeMessage

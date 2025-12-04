@@ -1,6 +1,7 @@
 import type { Plugin } from 'vite';
 import { createServerMiddleware } from './core/serverMiddleware';
 import { transformSourceCode } from './core/astTransformer';
+import { generateDesignModeConfig } from './utils/tailwindConfigResolver';
 
 
 export interface DesignModeOptions {
@@ -73,12 +74,20 @@ const __dirname = dirname(__filename);
 const VIRTUAL_CLIENT_MODULE_ID = 'virtual:appdev-design-mode-client';
 const RESOLVED_VIRTUAL_CLIENT_MODULE_ID = '\0' + VIRTUAL_CLIENT_MODULE_ID + '.tsx';
 
+// Tailwind 配置虚拟模块 ID
+const TAILWIND_CONFIG_MODULE_ID = 'virtual:tailwind-config';
+const RESOLVED_TAILWIND_CONFIG_MODULE_ID = '\0' + TAILWIND_CONFIG_MODULE_ID;
+
 function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
   // 保存 base 配置，用于构建正确的客户端代码路径
   let basePath = '/';
   // 保存当前命令（serve 或 build），用于判断是否为开发环境
   let currentCommand: 'serve' | 'build' = 'serve';
+  // 缓存 Tailwind 配置，避免重复解析
+  let tailwindConfigCache: any = null;
+  // 项目根目录（在 config hook 中初始化）
+  let projectRoot = process.cwd();
 
   // 检查插件是否应该生效
   // 仅在开发环境（serve）或明确启用生产环境时生效
@@ -106,11 +115,14 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       if (id === VIRTUAL_CLIENT_MODULE_ID) {
         return RESOLVED_VIRTUAL_CLIENT_MODULE_ID;
       }
+      if (id === TAILWIND_CONFIG_MODULE_ID) {
+        return RESOLVED_TAILWIND_CONFIG_MODULE_ID;
+      }
       return null;
     },
 
     // 加载虚拟模块内容
-    load(id) {
+    async load(id) {
       // 如果插件未启用，不加载虚拟模块
       if (!isPluginEnabled()) {
         return null;
@@ -138,6 +150,32 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         );
 
         return rewrittenCode;
+      }
+
+      // 处理 Tailwind 配置虚拟模块
+      if (id === RESOLVED_TAILWIND_CONFIG_MODULE_ID) {
+        console.log('[VITE PLUGIN] Loading Tailwind config virtual module...');
+        console.log('[VITE PLUGIN] projectRoot:', projectRoot);
+
+        try {
+          // 使用缓存避免重复解析
+          if (!tailwindConfigCache) {
+            console.log('[VITE PLUGIN] Generating Tailwind config...');
+            tailwindConfigCache = await generateDesignModeConfig(projectRoot);
+            console.log('[VITE PLUGIN] Generated config:', JSON.stringify(tailwindConfigCache, null, 2));
+          } else {
+            console.log('[VITE PLUGIN] Using cached config');
+          }
+
+          // 返回 JSON 格式的配置
+          const moduleCode = `export default ${JSON.stringify(tailwindConfigCache)};`;
+          console.log('[VITE PLUGIN] Returning module code, length:', moduleCode.length);
+          return moduleCode;
+        } catch (error: any) {
+          console.error('[appdev-design-mode] Failed to load Tailwind config:', error);
+          // 返回空配置作为降级
+          return `export default {};`;
+        }
       }
 
       // **NEW: Process tsx/jsx files in load hook BEFORE React plugin**
@@ -168,23 +206,11 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       // 保存当前命令，用于后续判断
       currentCommand = command;
 
+      // 保存项目根目录
+      projectRoot = config.root ?? process.cwd();
+
       // 保存 base 配置，确保路径正确
       basePath = config.base || '/';
-      // 规范化 base 路径：确保以 / 开头和结尾（除非是根路径）
-      if (!basePath.startsWith('/')) {
-        basePath = '/' + basePath;
-      }
-      if (basePath !== '/' && !basePath.endsWith('/')) {
-        basePath = basePath + '/';
-      }
-
-      // 只在开发模式启用
-      if (!isPluginEnabled()) {
-        return {};
-      }
-
-      // 获取项目根目录（Vite 默认是 process.cwd()）
-      const projectRoot = config.root ?? process.cwd();
 
       // 合并用户已有的 fs.allow 配置
       const existingAllow = config.server?.fs?.allow || [];

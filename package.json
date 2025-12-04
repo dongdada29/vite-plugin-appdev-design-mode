@@ -57,6 +57,7 @@
     "@types/node": "^20.0.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "concurrently": "^8.2.2",
     "typescript": "^5.0.0",
     "vite": "^5.4.21",
     "vitest": "^1.0.0"
@@ -64,6 +65,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsc && tsc -p tsconfig.cli.json && node scripts/copy-client.mjs && node scripts/clean-maps.mjs",
+    "build:watch": "concurrently -n \"vite,tsc,tsc:cli,copy\" -c \"blue,green,yellow,magenta\" \"vite build --watch\" \"tsc --watch\" \"tsc -p tsconfig.cli.json --watch\" \"node scripts/watch-copy.mjs\"",
     "publish": "npm run build && npm publish --access=public",
     "build:cli": "tsc -p tsconfig.cli.json",
     "test": "vitest",
