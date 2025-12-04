@@ -97,6 +97,12 @@ export const AttributeNames = {
   get contextMenuHover() {
     return getAttributeName('context-menu-hover');
   },
+  get fileType() {
+    return getAttributeName('file-type');
+  },
+  get childrenSource() {
+    return getAttributeName('children-source');
+  },
 } as const;
 
 /**

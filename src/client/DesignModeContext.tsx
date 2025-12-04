@@ -23,8 +23,9 @@ import {
 } from '../types/messages';
 import { bridge, messageValidator } from './bridge';
 import { AttributeNames } from './utils/attributeNames';
-import { isPureStaticText } from './utils/elementUtils';
+import { isPureStaticText, isContentEditable, findElementBySourceInfo } from './utils/elementUtils';
 import { extractSourceInfo } from './utils/sourceInfo';
+import { findAllElementsWithSameSource } from './utils/elementMatching';
 
 export interface Modification {
   id: string;
@@ -318,23 +319,8 @@ export const DesignModeProvider: React.FC<{
 
         const oldClass = element.className;
 
-        // 查找所有具有相同 element-id 的元素（列表项同步）
-        const elementId = element.getAttribute(AttributeNames.elementId);
-        let relatedElements: HTMLElement[] = [element];
-        
-        if (elementId) {
-          // 使用 element-id 查找所有相同的列表项
-          const allElementsWithId = Array.from(
-            document.querySelectorAll(`[${AttributeNames.elementId}]`)
-          ) as HTMLElement[];
-          
-          relatedElements = allElementsWithId.filter(el => {
-            const elId = el.getAttribute(AttributeNames.elementId);
-            return elId === elementId;
-          });
-        } else {
-          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
-        }
+        // 查找所有具有相同源信息的元素（严格匹配：考虑源文件、组件上下文和嵌套关系）
+        const relatedElements = findAllElementsWithSameSource(element);
 
         // 应用样式更新到所有相关元素（列表项同步）
         relatedElements.forEach(el => {
@@ -435,16 +421,12 @@ export const DesignModeProvider: React.FC<{
           return;
         }
 
-        // 根据 sourceInfo 查找元素
-        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-
-        const element = document.querySelector(selector) as HTMLElement;
+        // 根据 sourceInfo 查找元素（处理 component-usage 的情况）
+        const element = findElementBySourceInfo(sourceInfo);
         if (!element) {
           console.error(
             '[DesignMode] Element not found for sourceInfo:',
-            sourceInfo,
-            'Selector:',
-            selector
+            sourceInfo
           );
           // 尝试查找所有带有 file 属性的元素
           const allElements = document.querySelectorAll(
@@ -456,7 +438,23 @@ export const DesignModeProvider: React.FC<{
             payload: {
               code: 'ELEMENT_NOT_FOUND',
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
-              details: { sourceInfo, selector },
+              details: { sourceInfo },
+            },
+            timestamp: Date.now(),
+          });
+          return;
+        }
+
+        // 检查是否允许更新内容：必须有 static-content="true" 属性（或 children-source="usage" 时检查父级）
+        if (!isContentEditable(element)) {
+          console.warn('[DesignMode] Ignored content update on non-static element:', element);
+
+          sendToParent({
+            type: 'ERROR',
+            payload: {
+              code: 'CONTENT_UPDATE_FORBIDDEN',
+              message: 'Cannot update content of non-static element',
+              details: { sourceInfo },
             },
             timestamp: Date.now(),
           });
@@ -465,34 +463,33 @@ export const DesignModeProvider: React.FC<{
 
         const originalContent = element.innerText || element.textContent || '';
 
-        // 查找所有具有相同 element-id 的元素（列表项同步）
-        const elementId = element.getAttribute(AttributeNames.elementId);
-        let relatedElements: HTMLElement[] = [element];
-        
-        if (elementId) {
-          // 使用 element-id 查找所有相同的列表项
-          const allElementsWithId = Array.from(
-            document.querySelectorAll(`[${AttributeNames.elementId}]`)
-          ) as HTMLElement[];
-          
-          relatedElements = allElementsWithId.filter(el => {
-            const elId = el.getAttribute(AttributeNames.elementId);
-            return elId === elementId;
+        // 查找所有具有相同源信息的元素（严格匹配：考虑源文件、组件上下文和嵌套关系）
+        // 特殊处理：对于 children-source="usage" 的元素，不同步更新其他实例
+        // 因为虽然它们来自同一个组件定义，但内容来自不同的使用位置，应该独立更新
+        const childrenSource = element.getAttribute(AttributeNames.childrenSource);
+        const isPassThroughChildren = childrenSource === 'usage';
+
+        if (!isPassThroughChildren) {
+          // 只有非 pass-through children 才同步更新相关元素
+          const relatedElements = findAllElementsWithSameSource(element);
+
+          // 应用内容更新到所有相关元素（列表项同步）
+          relatedElements.forEach(el => {
+            el.setAttribute('data-ignore-mutation', 'true');
+            el.innerText = newContent;
+            // Use setTimeout to ensure MutationObserver sees the attribute
+            setTimeout(() => {
+              el.removeAttribute('data-ignore-mutation');
+            }, 0);
           });
         } else {
-          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
-        }
-
-        // 应用内容更新到所有相关元素（列表项同步）
-        relatedElements.forEach(el => {
-          el.setAttribute('data-ignore-mutation', 'true');
-          el.innerText = newContent;
-          // Use setTimeout to ensure MutationObserver sees the attribute
+          // 对于 pass-through children，只更新当前元素
+          element.setAttribute('data-ignore-mutation', 'true');
+          element.innerText = newContent;
           setTimeout(() => {
-            el.removeAttribute('data-ignore-mutation');
+            element.removeAttribute('data-ignore-mutation');
           }, 0);
-        });
-
+        }
 
         // 更新选中的元素状态（如果当前选中的是这个元素）
         if (selectedElement === element) {
@@ -688,7 +685,7 @@ export const DesignModeProvider: React.FC<{
               },
               isStaticText: isStaticText || false, // 默认为 false
             };
-            
+
             sendToParent({
               type: 'ELEMENT_SELECTED',
               payload: { elementInfo },
@@ -816,8 +813,13 @@ export const DesignModeProvider: React.FC<{
       const oldClasses = element.className;
       const mergedClasses = twMerge(oldClasses, newClass);
 
-      // 更新DOM
-      element.className = mergedClasses;
+      // 查找所有具有相同源信息的元素（严格匹配：考虑源文件、组件上下文和嵌套关系）
+      const relatedElements = findAllElementsWithSameSource(element);
+
+      // 更新所有相关元素的DOM
+      relatedElements.forEach(el => {
+        el.className = mergedClasses;
+      });
 
       // 更新源码
       await updateSource(element, mergedClasses, 'style', oldClasses);
@@ -858,6 +860,12 @@ export const DesignModeProvider: React.FC<{
    */
   const updateElementContent = useCallback(
     async (element: HTMLElement, newContent: string) => {
+      // 检查是否允许更新内容：必须有 static-content="true" 属性（或 children-source="usage" 时检查父级）
+      if (!isContentEditable(element)) {
+        console.warn('[DesignMode] Cannot update content of non-static element:', element);
+        throw new Error('Cannot update content of non-static element');
+      }
+
       const sourceInfo = extractSourceInfo(element);
       const originalContent = element.innerText;
 

@@ -43,12 +43,23 @@ export function createSourceMappingPlugin(
         // 获取组件信息
         const componentInfo = extractComponentInfo(path);
 
+        // 判断当前文件是否是组件定义文件（components/ui/ 或 components/common/）
+        const isComponentDefinitionFile =
+          fileName.includes('/components/ui/') ||
+          fileName.includes('/components/common/') ||
+          fileName.includes('\\components\\ui\\') ||
+          fileName.includes('\\components\\common\\');
+
+        // 判断当前元素是否是组件引用（大写开头的 JSX 元素通常是组件）
+        const elementName = getJSXElementName(node.name);
+        const isComponentReference = /^[A-Z]/.test(elementName);
+
         // 构建源码位置信息
         const sourceInfo: SourceMappingInfo = {
           fileName: fileName,
           lineNumber: location.start.line,
           columnNumber: location.start.column,
-          elementType: getJSXElementName(node.name),
+          elementType: elementName,
           componentName: componentInfo.componentName,
           functionName: componentInfo.functionName,
           elementId: generateElementId(node, fileName, location),
@@ -67,9 +78,31 @@ export function createSourceMappingPlugin(
         // 添加单独的属性以便于查询
         addIndividualAttributes(node, sourceInfo, options);
 
+        // 添加文件类型标识：区分组件定义文件和使用组件的页面文件
+        addFileTypeAttribute(node, isComponentDefinitionFile, isComponentReference, options);
+
         // Check if content is static and add attribute
+        // 重要：
+        // 1. 在组件定义文件中，即使内容是静态的，也不应该添加 static-content 属性
+        //    因为编辑应该发生在使用组件的页面文件中，而不是组件定义文件中
+        // 2. 对于组件引用（component-usage），也不应该添加 static-content 属性
+        //    因为组件的实际渲染元素在运行时才确定，无法准确判断内容是否静态
+        //    例如 <CardTitle>功能特色</CardTitle>，虽然 "功能特色" 是静态文本，
+        //    但 CardTitle 渲染为 <div>，这个 div 会有 children-source="usage"
+        //    应该在组件定义中标记，而不是使用位置
         if (isStaticContent(path)) {
-          addStaticContentAttribute(node, path, options);
+          // 只有在非组件定义文件且非组件引用时才添加 static-content 属性
+          // 这样可以确保编辑操作只发生在真正的静态内容上（如普通HTML标签的文本）
+          if (!isComponentDefinitionFile && !isComponentReference) {
+            addStaticContentAttribute(node, path, options);
+          }
+        }
+
+        // 特殊处理：如果当前元素在组件定义文件中，且接收 children 作为 props
+        // 我们需要标记这个元素，表示它的内容来自使用位置
+        // 这样在运行时可以找到正确的源码位置
+        if (isComponentDefinitionFile && receivesChildrenAsProps(path)) {
+          addChildrenSourceAttribute(node, path, options);
         }
       }
     }
@@ -243,7 +276,7 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
   // Helper to add attribute if it doesn't exist
   const addAttr = (name: string, value: string | number | undefined) => {
     if (value === undefined) return;
-    
+
     node.attributes = node.attributes.filter(a =>
       !(t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === name)
     );
@@ -303,13 +336,13 @@ function isStaticContent(path: NodePath): boolean {
 function addStaticContentAttribute(node: t.JSXOpeningElement, path: NodePath, options: Required<DesignModeOptions>) {
   const { attributePrefix } = options;
   const attributeName = `${attributePrefix}-static-content`;
-  
+
   // 双重验证：再次检查元素是否真的只包含纯文本节点
   // 即使调用前已经检查过，这里也再次验证以确保安全
   if (!isStaticContent(path)) {
     return; // 如果不是纯静态文本，不添加属性
   }
-  
+
   // Check if attribute already exists
   const hasAttr = node.attributes.some(a =>
     t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === attributeName
@@ -319,6 +352,222 @@ function addStaticContentAttribute(node: t.JSXOpeningElement, path: NodePath, op
     node.attributes.push(t.jSXAttribute(
       t.jSXIdentifier(attributeName),
       t.stringLiteral('true')
+    ));
+  }
+}
+
+/**
+ * 添加文件类型属性，用于区分组件定义文件和使用组件的页面文件
+ * @param node JSX 元素节点
+ * @param isComponentDefinitionFile 是否是组件定义文件
+ * @param isComponentReference 是否是组件引用（大写开头的元素）
+ * @param options 配置选项
+ */
+function addFileTypeAttribute(
+  node: t.JSXOpeningElement,
+  isComponentDefinitionFile: boolean,
+  isComponentReference: boolean,
+  options: Required<DesignModeOptions>
+) {
+  const { attributePrefix } = options;
+  const attributeName = `${attributePrefix}-file-type`;
+
+  // 移除现有属性
+  node.attributes = node.attributes.filter(a =>
+    !(t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === attributeName)
+  );
+
+  // 确定文件类型
+  let fileType: string;
+  if (isComponentDefinitionFile) {
+    fileType = 'component-definition'; // 组件定义文件
+  } else if (isComponentReference) {
+    fileType = 'component-usage'; // 页面文件中使用组件
+  } else {
+    fileType = 'page-content'; // 页面文件中的原生元素
+  }
+
+  node.attributes.push(t.jSXAttribute(
+    t.jSXIdentifier(attributeName),
+    t.stringLiteral(fileType)
+  ));
+}
+
+/**
+ * 检查元素是否接收 children 作为 props
+ * 这通常意味着元素的内容来自组件使用位置，而不是组件定义位置
+ * 
+ * 改进：对于组件定义文件中的元素，如果它的父函数接收 props（包括通过 ...props 传递），
+ * 且元素使用了 {...props} 展开，则认为它可能接收 children
+ */
+function receivesChildrenAsProps(path: NodePath): boolean {
+  const { node } = path;
+  const element = path.parent; // JSXElement
+
+  if (!t.isJSXElement(element)) return false;
+
+  // 检查父函数是否接收 props 参数
+  const functionParent = path.findParent((p: NodePath) =>
+    t.isFunctionDeclaration(p.node) ||
+    t.isArrowFunctionExpression(p.node) ||
+    t.isVariableDeclarator(p.node)
+  );
+
+  if (!functionParent) return false;
+
+  // 检查函数参数
+  let hasPropsParam = false;
+  let hasChildrenParam = false;
+
+  if (t.isFunctionDeclaration(functionParent.node)) {
+    functionParent.node.params.forEach((param: any) => {
+      if (t.isIdentifier(param)) {
+        if (param.name === 'children') {
+          hasChildrenParam = true;
+        }
+        if (param.name === 'props') {
+          hasPropsParam = true;
+        }
+      }
+      if (t.isObjectPattern(param)) {
+        // 检查对象解构中是否有 children
+        const hasChildrenInPattern = param.properties.some((prop: any) => {
+          if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
+            return prop.key.name === 'children';
+          }
+          return false;
+        });
+        if (hasChildrenInPattern) {
+          hasChildrenParam = true;
+        }
+        // 如果有对象解构参数，通常意味着接收 props
+        hasPropsParam = true;
+      }
+    });
+  } else if (t.isArrowFunctionExpression(functionParent.node)) {
+    functionParent.node.params.forEach((param: any) => {
+      if (t.isIdentifier(param)) {
+        if (param.name === 'children') {
+          hasChildrenParam = true;
+        }
+        if (param.name === 'props') {
+          hasPropsParam = true;
+        }
+      }
+      if (t.isObjectPattern(param)) {
+        const hasChildrenInPattern = param.properties.some((prop: any) => {
+          if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
+            return prop.key.name === 'children';
+          }
+          return false;
+        });
+        if (hasChildrenInPattern) {
+          hasChildrenParam = true;
+        }
+        hasPropsParam = true;
+      }
+    });
+  } else if (t.isVariableDeclarator(functionParent.node)) {
+    const init = functionParent.node.init;
+    if (t.isArrowFunctionExpression(init) || t.isFunctionExpression(init)) {
+      init.params.forEach((param: any) => {
+        if (t.isIdentifier(param)) {
+          if (param.name === 'children') {
+            hasChildrenParam = true;
+          }
+          if (param.name === 'props') {
+            hasPropsParam = true;
+          }
+        }
+        if (t.isObjectPattern(param)) {
+          const hasChildrenInPattern = param.properties.some((prop: any) => {
+            if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
+              return prop.key.name === 'children';
+            }
+            return false;
+          });
+          if (hasChildrenInPattern) {
+            hasChildrenParam = true;
+          }
+          hasPropsParam = true;
+        }
+      });
+    }
+  }
+
+  // 如果函数明确接收 children 参数
+  if (hasChildrenParam) {
+    // 检查当前元素是否使用了 children（通过 {children} 或 {props.children}）
+    if (t.isJSXElement(element)) {
+      const hasChildrenExpression = element.children.some((child: any) => {
+        if (t.isJSXExpressionContainer(child)) {
+          const expression = child.expression;
+          if (t.isIdentifier(expression)) {
+            return expression.name === 'children';
+          }
+          if (t.isMemberExpression(expression)) {
+            return t.isIdentifier(expression.object) &&
+              expression.object.name === 'props' &&
+              t.isIdentifier(expression.property) &&
+              expression.property.name === 'children';
+          }
+        }
+        return false;
+      });
+      if (hasChildrenExpression) {
+        return true;
+      }
+    }
+  }
+
+  // 如果函数接收 props 参数（通过对象解构或直接 props），
+  // 且当前元素使用了 {...props} 展开，则认为它可能接收 children
+  if (hasPropsParam) {
+    // 检查当前元素是否使用了 {...props} 展开
+    const hasPropsSpread = node.attributes.some((attr: any) => {
+      if (t.isJSXSpreadAttribute(attr)) {
+        const argument = attr.argument;
+        if (t.isIdentifier(argument)) {
+          // {...props} 或 {...rest}
+          return argument.name === 'props' || argument.name === 'rest' || argument.name.endsWith('Props');
+        }
+        if (t.isMemberExpression(argument)) {
+          // {...someObject.props}
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (hasPropsSpread) {
+      // 如果元素使用了 {...props}，且元素本身没有显式的 children，
+      // 那么 children 可能是通过 props 传递的
+      // 在这种情况下，我们认为这个元素接收 children 作为 props
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * 添加 children-source 属性，标记元素的内容来自使用位置
+ * 这样在运行时可以找到正确的源码位置
+ */
+function addChildrenSourceAttribute(node: t.JSXOpeningElement, path: NodePath, options: Required<DesignModeOptions>) {
+  const { attributePrefix } = options;
+  const attributeName = `${attributePrefix}-children-source`;
+
+  // 检查属性是否已存在
+  const hasAttr = node.attributes.some(a =>
+    t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === attributeName
+  );
+
+  if (!hasAttr) {
+    // 添加属性，值为 'usage' 表示内容来自使用位置
+    node.attributes.push(t.jSXAttribute(
+      t.jSXIdentifier(attributeName),
+      t.stringLiteral('usage')
     ));
   }
 }

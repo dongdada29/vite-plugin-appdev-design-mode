@@ -1,8 +1,9 @@
 import { UpdateState, UpdateResult, UpdateOperation, UpdateManagerConfig } from '../types/UpdateTypes';
 import { SourceInfo } from '../../types/messages';
 import { extractSourceInfo, hasSourceMapping } from '../utils/sourceInfo';
-import { isPureStaticText } from '../utils/elementUtils';
+import { isPureStaticText, isContentEditable } from '../utils/elementUtils';
 import { AttributeNames } from '../utils/attributeNames';
+import { findAllElementsWithSameSource } from '../utils/elementMatching';
 
 export class EditManager {
   constructor(
@@ -65,8 +66,8 @@ export class EditManager {
       if (newText !== originalText.trim()) {
         element.innerText = newText;
 
-        // 同步更新所有相同列表项的内容（使用 element-id 查找）
-        const relatedElements = this.findAllElementsWithSameSource(element, sourceInfo);
+        // 同步更新所有相同列表项的内容（使用严格匹配：考虑源文件、组件上下文和嵌套关系）
+        const relatedElements = findAllElementsWithSameSource(element, sourceInfo);
         relatedElements.forEach(el => {
           if (el !== element) {
             el.innerText = newText;
@@ -107,8 +108,8 @@ export class EditManager {
     const handleInput = () => {
       const currentText = element.innerText.trim();
 
-      // 实时同步更新所有相同列表项的内容（使用 element-id 查找）
-      const relatedElements = this.findAllElementsWithSameSource(element, sourceInfo);
+      // 实时同步更新所有相同列表项的内容（使用严格匹配：考虑源文件、组件上下文和嵌套关系）
+      const relatedElements = findAllElementsWithSameSource(element, sourceInfo);
       relatedElements.forEach(el => {
         if (el !== element) {
           el.innerText = currentText;
@@ -170,6 +171,12 @@ export class EditManager {
     // 如果没有提供 oldValue，从元素中获取（注意：此时元素可能已经更新）
     const finalOldValue = oldValue ?? element.innerText;
 
+    // 检查是否允许更新内容：必须有 static-content="true" 属性（或 children-source="usage" 时检查父级）
+    if (!isContentEditable(element)) {
+      console.warn('[EditManager] Cannot update content of non-static element:', element);
+      throw new Error('Cannot update content of non-static element');
+    }
+
     const update: UpdateState = {
       id: this.generateUpdateId(),
       operation: 'content_update',
@@ -184,13 +191,21 @@ export class EditManager {
     };
 
     // Find all elements with the same source and update them (for preview)
-    // 使用 element-id 来查找相同的元素（特别是列表项）
-    const relatedElements = this.findAllElementsWithSameSource(element, finalSourceInfo);
-    relatedElements.forEach(el => {
-      if (el !== element) {
-        el.innerText = newValue;
-      }
-    });
+    // 特殊处理：对于 children-source="usage" 的元素，不同步更新其他实例
+    // 因为虽然它们来自同一个组件定义，但内容来自不同的使用位置，应该独立更新
+    const childrenSource = element.getAttribute(AttributeNames.childrenSource);
+    const isPassThroughChildren = childrenSource === 'usage';
+
+    if (!isPassThroughChildren) {
+      // 只有非 pass-through children 才同步更新相关元素
+      // 使用严格匹配：考虑源文件、组件上下文和嵌套关系
+      const relatedElements = findAllElementsWithSameSource(element, finalSourceInfo);
+      relatedElements.forEach(el => {
+        if (el !== element) {
+          el.innerText = newValue;
+        }
+      });
+    }
 
     return this.processUpdate(update);
   }
@@ -224,8 +239,8 @@ export class EditManager {
     };
 
     // Find all elements with the same source and update them (for preview)
-    // 使用 element-id 来查找相同的元素（特别是列表项）
-    const relatedElements = this.findAllElementsWithSameSource(element, finalSourceInfo);
+    // 使用严格匹配：考虑源文件、组件上下文和嵌套关系
+    const relatedElements = findAllElementsWithSameSource(element, finalSourceInfo);
     relatedElements.forEach(el => {
       if (el !== element) {
         el.className = newClass;
@@ -269,8 +284,8 @@ export class EditManager {
     };
 
     // Find all elements with the same source and update them (for preview)
-    // 使用 element-id 来查找相同的元素（特别是列表项）
-    const relatedElements = this.findAllElementsWithSameSource(element, sourceInfo);
+    // 使用严格匹配：考虑源文件、组件上下文和嵌套关系
+    const relatedElements = findAllElementsWithSameSource(element, sourceInfo);
     relatedElements.forEach(el => {
       if (el !== element) {
         el.setAttribute(attributeName, newValue);
@@ -364,33 +379,5 @@ export class EditManager {
     }
   }
 
-  /**
-   * Find all elements with the same source info
-   * 使用 element-id 来查找相同的元素（特别是列表项）
-   * @param element - 要查找相同元素的参考元素
-   * @param sourceInfo - 源代码信息（可选，已废弃，保留用于兼容性）
-   */
-  private findAllElementsWithSameSource(element: HTMLElement, sourceInfo?: SourceInfo): HTMLElement[] {
-    // 使用 element-id 来查找相同的元素
-    // 所有元素都应该有 element-id 属性
-    const elementId = element.getAttribute(AttributeNames.elementId);
-    
-    if (!elementId) {
-      console.warn('[EditManager] Element missing element-id attribute:', element);
-      return [element]; // 如果没有 element-id，只返回当前元素
-    }
-
-    // 使用 element-id 查找所有具有相同 element-id 的元素
-    // 注意：由于 element-id 可能包含特殊字符（如冒号），我们需要使用更安全的方式
-    // 遍历所有具有 element-id 属性的元素，然后比较值
-    const allElementsWithId = Array.from(
-      document.querySelectorAll(`[${AttributeNames.elementId}]`)
-    ) as HTMLElement[];
-    
-    return allElementsWithId.filter(el => {
-      const elId = el.getAttribute(AttributeNames.elementId);
-      return elId === elementId;
-    });
-  }
 }
 

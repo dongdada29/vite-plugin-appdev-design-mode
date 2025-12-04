@@ -88,7 +88,7 @@ export default function Home() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
                   <div>
-                    <h3 className="font-semibold text-foreground mb-2">⚡ 快速生成</h3>
+                    <h3 className="font-semibold text-foreground mb-2">⚡ 快速生成 1</h3>
                     <p className="text-sm text-muted-foreground">
                       AI 驱动，秒级生成高质量内容
                     </p>

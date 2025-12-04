@@ -388,7 +388,15 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string, enableBack
 
       // 验证批量更新
       const validationResults = await Promise.allSettled(
-        updates.map(update => validateUpdateRequest(update, rootDir))
+        updates.map(update => {
+          console.log('[appdev-design-mode] Validating update request:', {
+            filePath: update.filePath,
+            line: update.line,
+            column: update.column,
+            type: update.type
+          });
+          return validateUpdateRequest(update, rootDir);
+        })
       );
 
       // 创建批量更新会话
@@ -415,6 +423,7 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string, enableBack
         const update = updates[i];
         const validation = validationResults[i];
 
+        // 检查验证结果
         if (validation.status === 'rejected') {
           results.push({
             success: false,
@@ -423,6 +432,27 @@ async function handleBatchUpdate(req: any, res: any, rootDir: string, enableBack
           });
           batchSession.failedUpdates++;
           continue;
+        }
+
+        // 检查验证是否通过（validation.value 是 { valid: boolean; errors: string[] }）
+        if (validation.status === 'fulfilled' && validation.value) {
+          if (!validation.value.valid) {
+            // 验证失败，拒绝更新
+            const errorMsg = validation.value.errors?.join(', ') || 'Validation failed';
+            console.warn('[appdev-design-mode] Update validation failed:', {
+              filePath: update.filePath,
+              errors: validation.value.errors
+            });
+            results.push({
+              success: false,
+              error: errorMsg,
+              update
+            });
+            batchSession.failedUpdates++;
+            continue;
+          } else {
+            console.log('[appdev-design-mode] Update validation passed:', update.filePath);
+          }
         }
 
         try {
@@ -854,11 +884,80 @@ async function validateUpdateRequest(update: any, rootDir: string): Promise<{ va
     } catch {
       errors.push(`File not found: ${update.filePath}`);
     }
+
+    // 防止修改组件定义文件（components/ui/ 目录下的文件）
+    // 这些文件是组件库，不应该通过设计模式直接编辑
+    const normalizedPath = update.filePath.replace(/\\/g, '/');
+    
+    // 检查是否是组件定义文件（支持绝对路径和相对路径）
+    const isComponentFile = 
+      normalizedPath.includes('/components/ui/') ||
+      normalizedPath.includes('/components/common/') ||
+      normalizedPath.includes('\\components\\ui\\') ||
+      normalizedPath.includes('\\components\\common\\') ||
+      normalizedPath.includes('/node_modules/') ||
+      normalizedPath.includes('\\node_modules\\') ||
+      normalizedPath.endsWith('.d.ts') ||
+      normalizedPath.includes('/dist/') ||
+      normalizedPath.includes('\\dist\\') ||
+      normalizedPath.includes('/build/') ||
+      normalizedPath.includes('\\build\\') ||
+      // 检查文件名是否是组件文件（如 card.tsx, button.tsx 等）
+      /[\/\\]components[\/\\](ui|common)[\/\\][^\/\\]+\.(tsx?|jsx?)$/i.test(normalizedPath);
+    
+    if (isComponentFile) {
+      errors.push(`Cannot edit component definition files. Please edit the file where the component is used instead. File: ${update.filePath}`);
+    }
+
+    // 额外检查：如果更新请求来自组件定义文件，即使路径检查通过，也要拒绝
+    // 这可以防止通过其他方式绕过路径检查
+    if (normalizedPath.match(/[\/\\]components[\/\\](ui|common)[\/\\]/i)) {
+      errors.push(`Cannot edit component definition files. Component files in /components/ui/ or /components/common/ are protected. Please edit the page file where the component is used. File: ${update.filePath}`);
+    }
   }
 
   // 检查更新类型
   if (update.type && !['style', 'content', 'attribute'].includes(update.type)) {
     errors.push(`Invalid update type: ${update.type}`);
+  }
+
+  // 验证 newValue 和 originalValue 的合理性
+  if (update.newValue !== undefined) {
+    // 检查 newValue 是否包含明显无效的内容
+    // 如果 newValue 只包含中文、数字和空格，没有代码结构，可能是误输入
+    const codePattern = /[<>{}[\]();=+\-*\/&|!@#$%^,.:'"]/;
+    const onlyChineseAndNumbers = /^[\u4e00-\u9fa5\s\d\n]+$/.test(update.newValue.trim());
+    
+    if (onlyChineseAndNumbers && !codePattern.test(update.newValue) && update.newValue.length > 5) {
+      errors.push(`Suspicious newValue: appears to be plain text without code structure. Value: "${update.newValue.substring(0, 50)}"`);
+    }
+
+    // 检查 newValue 长度是否合理（防止过大的更新）
+    if (update.newValue.length > 10000) {
+      errors.push(`newValue is too long (${update.newValue.length} characters, max 10000)`);
+    }
+  }
+
+  // 如果提供了 originalValue，验证它是否与文件中的实际内容匹配
+  if (update.originalValue !== undefined && update.filePath && update.line !== undefined) {
+    try {
+      const fullPath = path.resolve(rootDir, update.filePath);
+      const fileContent = await fs.promises.readFile(fullPath, 'utf-8');
+      const lines = fileContent.split('\n');
+      const targetLine = lines[update.line - 1];
+      
+      if (targetLine) {
+        // 检查 originalValue 是否在目标行附近
+        const lineContent = targetLine.substring(update.column - 1);
+        if (!lineContent.includes(update.originalValue) && !targetLine.includes(update.originalValue)) {
+          // 警告但不阻止：originalValue 可能不匹配，但可能是由于文件已更新
+          console.warn(`[appdev-design-mode] originalValue may not match file content at line ${update.line}, column ${update.column}. Expected: "${update.originalValue}", Found: "${targetLine.substring(0, 100)}"`);
+        }
+      }
+    } catch (error) {
+      // 如果无法读取文件，只记录警告，不阻止更新
+      console.warn(`[appdev-design-mode] Could not validate originalValue: ${error}`);
+    }
   }
 
   return {

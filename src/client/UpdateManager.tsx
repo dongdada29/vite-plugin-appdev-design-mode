@@ -112,28 +112,62 @@ export class UpdateManager {
     // 检查 design 模式是否开启（必须条件）
     if (!this.isDesignMode) return;
 
-    const target = event.target as HTMLElement;
-    
+    // 获取目标元素（如果是文本节点，获取其父元素）
+    let target = event.target as HTMLElement;
+    if (target.nodeType === Node.TEXT_NODE) {
+      target = target.parentElement as HTMLElement;
+    }
+    if (!target || !(target instanceof HTMLElement)) return;
+
     // 检查元素是否有源码映射（可编辑的前提条件）
     if (!hasSourceMapping(target)) return;
 
     // 排除设计模式 UI 元素
     if (target.closest('#__vite_plugin_design_mode__')) return;
-    
+
     // 排除右键菜单
     if (target.closest(`[${AttributeNames.contextMenu}="true"]`)) return;
 
     // 检查元素是否有 static-content 属性且值为 'true'（必须条件）
     // 使用 AttributeNames.staticContent 来获取正确的属性名（支持可配置前缀，如 data-xagi-static-content）
     const staticContentAttr = target.getAttribute(AttributeNames.staticContent);
+
     if (staticContentAttr !== 'true') {
       // 如果 static-content 属性不存在或值不为 'true'，不允许编辑
+      return;
+    }
+
+    // 先提取源码信息（这会自动处理组件使用位置的查找）
+    const sourceInfo = extractSourceInfo(target);
+
+    if (!sourceInfo) {
+      console.warn('[UpdateManager] Cannot extract source info from element');
+      return;
+    }
+
+    // 检查文件路径：防止编辑组件定义文件
+    // 特殊情况：如果元素有 children-source="usage"，说明它的内容来自使用位置
+    // 在这种情况下，即使源信息指向组件定义文件，也应该允许编辑
+    const childrenSource = target.getAttribute(AttributeNames.childrenSource);
+    const isPassThroughChildren = childrenSource === 'usage';
+
+    const filePath = sourceInfo.fileName.replace(/\\/g, '/');
+    const isComponentFile =
+      filePath.includes('/components/ui/') ||
+      filePath.includes('/components/common/') ||
+      filePath.includes('\\components\\ui\\') ||
+      filePath.includes('\\components\\common\\');
+
+    // 如果是组件定义文件，但不是 pass-through children，则不允许编辑
+    if (isComponentFile && !isPassThroughChildren) {
+      console.warn('[UpdateManager] Cannot edit component definition files. File:', filePath);
       return;
     }
 
     // 防止默认行为
     event.preventDefault();
     event.stopPropagation();
+
 
     // Check if it's pure static text - REMOVED to let EditManager handle validation
     // if (!isPureStaticText(target)) {
@@ -414,13 +448,13 @@ export class UpdateManager {
         alertMessage += `标签: <${elementInfo.tagName}>\n`;
         alertMessage += `类名: ${elementInfo.className}\n`;
         alertMessage += `内容: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`;
-        
+
         // 拷贝成功，发送成功消息
         sendCopyMessage(true);
       }).catch(err => {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('[UpdateManager] Failed to copy to clipboard:', err);
-        
+
         // 拷贝失败，发送失败消息
         sendCopyMessage(false, errorMessage);
       });
@@ -442,7 +476,7 @@ export class UpdateManager {
     // 构建 ADD_TO_CHAT 消息
     // 将 null 转换为 undefined，因为 AddToChatMessage 期望 undefined 而不是 null
     const contextSourceInfo = sourceInfo ?? undefined;
-    
+
     // 如果 sourceInfo 存在，构建完整的 elementInfo（包含必需的 sourceInfo 和 isStaticText）
     // 如果 sourceInfo 不存在，则不提供 elementInfo
     const elementInfo = sourceInfo ? {
