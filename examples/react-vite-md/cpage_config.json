@@ -1,0 +1,12 @@
+{
+  "name": "公众号推文助手",
+  "description": "专为微信公众号内容创作者设计，提供图文生成、图片配文、视频脚本创作等功能",
+  "icon": "https://agent-statics-tc.nuwax.com/store/cbc0aac4615e4665b31e199a55fb4870.png",
+  "coverImg": "https://agent-statics-tc.nuwax.com/store/4ef409a57fd04c589437058da1aee15e.png",
+  "coverImgSourceType": "SYSTEM",
+  "needLogin": true,
+  "proxyConfigs": null,
+  "pageArgConfigs": null,
+  "dataSourcePlugins": null,
+  "dataSourceWorkflows": null
+}
