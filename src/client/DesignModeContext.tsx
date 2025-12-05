@@ -268,6 +268,48 @@ export const DesignModeProvider: React.FC<{
   );
 
   /**
+   * 根据源码信息查找元素
+   */
+  const findElementBySourceInfo = useCallback(
+    (sourceInfo: SourceInfo): HTMLElement | null => {
+      // 1. 尝试通过 elementId 查找 (最快)
+      if (sourceInfo.elementId) {
+        const element = document.querySelector(`[${AttributeNames.elementId}="${sourceInfo.elementId}"]`);
+        if (element) return element as HTMLElement;
+      }
+
+      // 2. 尝试通过 file/line/column 属性查找 (如果存在)
+      const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
+      const element = document.querySelector(selector);
+      if (element) return element as HTMLElement;
+
+      // 3. 扫描所有带有 info 属性的元素 (最慢，但作为后备方案)
+      const allElements = document.querySelectorAll(`[${AttributeNames.info}]`);
+      for (let i = 0; i < allElements.length; i++) {
+        const el = allElements[i] as HTMLElement;
+        try {
+          const infoStr = el.getAttribute(AttributeNames.info);
+          if (infoStr) {
+            const info = JSON.parse(infoStr);
+            if (
+              info.fileName === sourceInfo.fileName &&
+              info.lineNumber === sourceInfo.lineNumber &&
+              info.columnNumber === sourceInfo.columnNumber
+            ) {
+              return el;
+            }
+          }
+        } catch (e) {
+          // ignore parse error
+        }
+      }
+
+      return null;
+    },
+    []
+  );
+
+  /**
    * 处理外部样式更新
    */
   const handleExternalStyleUpdate = useCallback(
@@ -289,19 +331,11 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-
-        const element = document.querySelector(selector) as HTMLElement;
+        const element = findElementBySourceInfo(sourceInfo);
         if (!element) {
           console.error(
             '[DesignMode] Element not found for sourceInfo:',
-            sourceInfo,
-            'Selector:',
-            selector
-          );
-          // 尝试查找所有带有 file 属性的元素
-          const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            sourceInfo
           );
 
           sendToParent({
@@ -309,7 +343,7 @@ export const DesignModeProvider: React.FC<{
             payload: {
               code: 'ELEMENT_NOT_FOUND',
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
-              details: { sourceInfo, selector },
+              details: { sourceInfo },
             },
             timestamp: Date.now(),
           });
@@ -411,6 +445,7 @@ export const DesignModeProvider: React.FC<{
       config.iframeMode?.enabled,
       sendToParent,
       setSelectedElement,
+      findElementBySourceInfo
     ]
   );
 
@@ -436,19 +471,11 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-
-        const element = document.querySelector(selector) as HTMLElement;
+        const element = findElementBySourceInfo(sourceInfo);
         if (!element) {
           console.error(
             '[DesignMode] Element not found for sourceInfo:',
-            sourceInfo,
-            'Selector:',
-            selector
-          );
-          // 尝试查找所有带有 file 属性的元素
-          const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            sourceInfo
           );
 
           sendToParent({
@@ -456,7 +483,7 @@ export const DesignModeProvider: React.FC<{
             payload: {
               code: 'ELEMENT_NOT_FOUND',
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
-              details: { sourceInfo, selector },
+              details: { sourceInfo },
             },
             timestamp: Date.now(),
           });
@@ -564,7 +591,51 @@ export const DesignModeProvider: React.FC<{
       config.iframeMode?.enabled,
       sendToParent,
       setSelectedElement,
+      findElementBySourceInfo
     ]
+  );
+
+  /**
+   * 更新源码文件
+   */
+  const updateSource = useCallback(
+    async (
+      element: HTMLElement,
+      newValue: string,
+      type: 'style' | 'content',
+      originalValue?: string
+    ) => {
+      const sourceInfo = extractSourceInfo(element);
+      if (!sourceInfo) {
+        throw new Error('Element does not have source mapping data');
+      }
+
+      try {
+        const response = await fetch('/__appdev_design_mode/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            filePath: sourceInfo.fileName,
+            line: sourceInfo.lineNumber,
+            column: sourceInfo.columnNumber,
+            newValue,
+            type,
+            originalValue,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update source');
+        }
+
+      } catch (error) {
+        console.error('[DesignMode] Error updating source:', error);
+        throw error;
+      }
+    },
+    []
   );
 
   /**
@@ -632,18 +703,7 @@ export const DesignModeProvider: React.FC<{
         });
       }
     },
-    []
-  );
-
-  /**
-   * 根据源码信息查找元素
-   */
-  const findElementBySourceInfo = useCallback(
-    (sourceInfo: SourceInfo): HTMLElement | null => {
-      const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-      return document.querySelector(selector) as HTMLElement;
-    },
-    []
+    [findElementBySourceInfo, sendToParent, updateSource]
   );
 
   /**
@@ -722,49 +782,6 @@ export const DesignModeProvider: React.FC<{
       return next;
     });
   }, []);
-
-  /**
-   * 更新源码文件
-   */
-  const updateSource = useCallback(
-    async (
-      element: HTMLElement,
-      newValue: string,
-      type: 'style' | 'content',
-      originalValue?: string
-    ) => {
-      const sourceInfo = extractSourceInfo(element);
-      if (!sourceInfo) {
-        throw new Error('Element does not have source mapping data');
-      }
-
-      try {
-        const response = await fetch('/__appdev_design_mode/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filePath: sourceInfo.fileName,
-            line: sourceInfo.lineNumber,
-            column: sourceInfo.columnNumber,
-            newValue,
-            type,
-            originalValue,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update source');
-        }
-
-      } catch (error) {
-        console.error('[DesignMode] Error updating source:', error);
-        throw error;
-      }
-    },
-    []
-  );
 
   /**
    * 提取元素源码信息

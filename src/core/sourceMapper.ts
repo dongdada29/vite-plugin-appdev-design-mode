@@ -102,8 +102,8 @@ export function createSourceMappingPlugin(
         // 添加元素ID属性
         addElementIdAttribute(node, sourceInfo, options);
 
-        // 添加单独的属性以便于查询
-        addIndividualAttributes(node, sourceInfo, options);
+        // 移除单独的属性以减少 DOM 体积（所有信息已包含在 info 属性中）
+        // addIndividualAttributes(node, sourceInfo, options);
 
         // Check if content is static and add attribute
         if (isStaticContent(path)) {
@@ -209,16 +209,17 @@ function generateElementId(node: t.JSXOpeningElement, fileName: string, location
   const tagName = getJSXElementName(node.name);
 
   // 提取关键属性
-  const className = extractStringAttribute(node, 'className');
+  // const className = extractStringAttribute(node, 'className'); // 移除 className 以缩短 ID
   const id = extractStringAttribute(node, 'id');
 
   // 构建唯一标识符
   const baseId = `${fileName}:${location.start.line}:${location.start.column}`;
   const tag = tagName.toLowerCase();
-  const cls = className ? className.replace(/\s+/g, '-') : '';
+  // const cls = className ? className.replace(/\s+/g, '-') : ''; // 移除 className
   const elementId = id ? `#${id}` : '';
 
-  return `${baseId}_${tag}${cls ? '_' + cls : ''}${elementId}`;
+  // return `${baseId}_${tag}${cls ? '_' + cls : ''}${elementId}`;
+  return `${baseId}_${tag}${elementId}`;
 }
 
 /**
