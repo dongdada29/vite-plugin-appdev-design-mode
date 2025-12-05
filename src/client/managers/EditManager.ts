@@ -71,7 +71,7 @@ export class EditManager {
       element.removeEventListener('blur', handleSave);
       element.removeEventListener('input', handleInput);
       element.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside, true);
 
       // 如果内容有变化，更新 DOM 并发送最终消息
       if (newText !== originalText.trim()) {
@@ -105,7 +105,7 @@ export class EditManager {
       element.removeEventListener('blur', handleSave);
       element.removeEventListener('input', handleInput);
       element.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside, true);
     };
 
     // 处理点击外部
