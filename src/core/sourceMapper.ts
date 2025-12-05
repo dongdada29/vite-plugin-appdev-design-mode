@@ -12,6 +12,7 @@ export interface SourceMappingInfo {
   functionName?: string;
   elementId: string;
   attributePrefix: string;
+  importPath?: string; // 新增：组件导入路径
 }
 
 export interface JSXElementWithLoc extends t.JSXOpeningElement {
@@ -30,9 +31,31 @@ export function createSourceMappingPlugin(
   options: Required<DesignModeOptions>
 ): PluginItem {
   const { attributePrefix } = options;
+  const imports: Record<string, string> = {}; // 存储导入映射：组件名 -> 导入路径
 
   return {
     visitor: {
+      // 1. 收集导入信息
+      ImportDeclaration(path: NodePath) {
+        const { node } = path;
+        const sourceValue = node.source.value; // 导入路径，例如 "@/components/ui/button"
+
+        node.specifiers.forEach((specifier: any) => {
+          if (t.isImportSpecifier(specifier)) {
+            // import { Button } from ...
+            imports[specifier.local.name] = sourceValue;
+            // console.log(`[DesignMode] Found import: ${specifier.local.name} from ${sourceValue}`);
+          } else if (t.isImportDefaultSpecifier(specifier)) {
+            // import Button from ...
+            imports[specifier.local.name] = sourceValue;
+            // console.log(`[DesignMode] Found default import: ${specifier.local.name} from ${sourceValue}`);
+          } else if (t.isImportNamespaceSpecifier(specifier)) {
+            // import * as UI from ...
+            imports[specifier.local.name] = sourceValue;
+          }
+        });
+      },
+
       JSXOpeningElement(path: NodePath) {
         const { node } = path;
 
@@ -42,17 +65,32 @@ export function createSourceMappingPlugin(
 
         // 获取组件信息
         const componentInfo = extractComponentInfo(path);
+        const elementType = getJSXElementName(node.name);
+
+        // 查找导入路径
+        // 如果是成员表达式 (e.g. UI.Button)，只查找对象部分 (UI)
+        let importPath: string | undefined;
+        if (t.isJSXIdentifier(node.name)) {
+          importPath = imports[node.name.name];
+        } else if (t.isJSXMemberExpression(node.name) && t.isJSXIdentifier(node.name.object)) {
+          importPath = imports[node.name.object.name];
+        }
+
+        // if (importPath) {
+        //   console.log(`[DesignMode] Injecting importPath for ${elementType}: ${importPath}`);
+        // }
 
         // 构建源码位置信息
         const sourceInfo: SourceMappingInfo = {
           fileName: fileName,
           lineNumber: location.start.line,
           columnNumber: location.start.column,
-          elementType: getJSXElementName(node.name),
+          elementType: elementType,
           componentName: componentInfo.componentName,
           functionName: componentInfo.functionName,
           elementId: generateElementId(node, fileName, location),
-          attributePrefix
+          attributePrefix,
+          importPath // 注入导入路径
         };
 
         // 添加源码信息属性（使用配置的前缀）
@@ -219,7 +257,8 @@ function addSourceInfoAttribute(node: t.JSXOpeningElement, sourceInfo: SourceMap
       elementType: sourceInfo.elementType,
       componentName: sourceInfo.componentName,
       functionName: sourceInfo.functionName,
-      elementId: sourceInfo.elementId
+      elementId: sourceInfo.elementId,
+      importPath: sourceInfo.importPath // 包含导入路径
     }))
   );
 
@@ -288,6 +327,7 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
   addAttr(`${attributePrefix}-column`, sourceInfo.columnNumber);
   addAttr(`${attributePrefix}-component`, sourceInfo.componentName);
   addAttr(`${attributePrefix}-function`, sourceInfo.functionName);
+  addAttr(`${attributePrefix}-import`, sourceInfo.importPath); // 添加导入路径
 }
 
 /**

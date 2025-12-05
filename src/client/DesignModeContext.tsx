@@ -321,13 +321,13 @@ export const DesignModeProvider: React.FC<{
         // 查找所有具有相同 element-id 的元素（列表项同步）
         const elementId = element.getAttribute(AttributeNames.elementId);
         let relatedElements: HTMLElement[] = [element];
-        
+
         if (elementId) {
           // 使用 element-id 查找所有相同的列表项
           const allElementsWithId = Array.from(
             document.querySelectorAll(`[${AttributeNames.elementId}]`)
           ) as HTMLElement[];
-          
+
           relatedElements = allElementsWithId.filter(el => {
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
@@ -468,13 +468,13 @@ export const DesignModeProvider: React.FC<{
         // 查找所有具有相同 element-id 的元素（列表项同步）
         const elementId = element.getAttribute(AttributeNames.elementId);
         let relatedElements: HTMLElement[] = [element];
-        
+
         if (elementId) {
           // 使用 element-id 查找所有相同的列表项
           const allElementsWithId = Array.from(
             document.querySelectorAll(`[${AttributeNames.elementId}]`)
           ) as HTMLElement[];
-          
+
           relatedElements = allElementsWithId.filter(el => {
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
@@ -681,14 +681,10 @@ export const DesignModeProvider: React.FC<{
               tagName: element.tagName.toLowerCase(),
               className: element.className,
               textContent: textContent,
-              sourceInfo: {
-                fileName: sourceInfo.fileName,
-                lineNumber: sourceInfo.lineNumber,
-                columnNumber: sourceInfo.columnNumber,
-              },
+              sourceInfo,
               isStaticText: isStaticText || false, // 默认为 false
             };
-            
+
             sendToParent({
               type: 'ELEMENT_SELECTED',
               payload: { elementInfo },

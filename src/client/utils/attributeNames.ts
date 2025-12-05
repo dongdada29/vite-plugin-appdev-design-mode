@@ -104,6 +104,9 @@ export const AttributeNames = {
   get contextMenuHover() {
     return getAttributeName('context-menu-hover');
   },
+  get import() {
+    return getAttributeName('import');
+  },
 } as const;
 
 /**
