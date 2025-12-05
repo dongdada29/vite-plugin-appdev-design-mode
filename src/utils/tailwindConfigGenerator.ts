@@ -82,9 +82,12 @@ function generateColorMap(colors: any): Record<string, Record<string, string>> {
 
     const colorMap: Record<string, Record<string, string>> = {};
 
+    console.log('[generateColorMap] Processing colors, total keys:', Object.keys(colors).length);
+
     Object.entries(colors).forEach(([colorName, colorValue]) => {
         // 跳过特殊颜色值
         if (typeof colorValue === 'string') {
+            console.log(`[generateColorMap] Skipping ${colorName}: string value`);
             return;
         }
 
@@ -100,6 +103,9 @@ function generateColorMap(colors: any): Record<string, Record<string, string>> {
 
             if (Object.keys(shades).length > 0) {
                 colorMap[colorName] = shades;
+                console.log(`[generateColorMap] Added ${colorName} with ${Object.keys(shades).length} shades`);
+            } else {
+                console.log(`[generateColorMap] Skipping ${colorName}: no valid shades`);
             }
         }
     });

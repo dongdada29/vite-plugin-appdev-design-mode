@@ -301,6 +301,21 @@ export const DesignModeProvider: React.FC<{
             '[DesignMode] Element not found for sourceInfo:',
             sourceInfo
           );
+          console.error('[DesignMode spec] Looking for selector:', `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`);
+
+          // Debug: List all elements with design mode attributes
+          const allElements = Array.from(document.querySelectorAll(`[${AttributeNames.file}]`));
+          console.error('[DesignMode] Found', allElements.length, 'elements with design mode attributes');
+          if (allElements.length > 0 && allElements.length < 10) {
+            allElements.forEach(el => {
+              const htmlEl = el as HTMLElement;
+              console.error('  -', htmlEl.tagName, {
+                file: htmlEl.getAttribute(AttributeNames.file),
+                line: htmlEl.getAttribute(AttributeNames.line),
+                column: htmlEl.getAttribute(AttributeNames.column)
+              });
+            });
+          }
 
           sendToParent({
             type: 'ERROR',

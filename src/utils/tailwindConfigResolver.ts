@@ -149,6 +149,12 @@ export async function resolveTailwindConfig(projectRoot: string): Promise<any> {
         const userConfig = await loadTailwindConfig(projectRoot);
         console.log('[resolveTailwindConfig] User config loaded:', userConfig ? 'yes' : 'no');
 
+        if (userConfig) {
+            console.log('[resolveTailwindConfig] User config theme.extend:', userConfig.theme?.extend);
+            console.log('[resolveTailwindConfig] User config theme.extend.colors:',
+                userConfig.theme?.extend?.colors ? Object.keys(userConfig.theme.extend.colors) : 'none');
+        }
+
         // 如果没有用户配置，使用最小配置（会得到完整的默认值）
         const config = userConfig || { content: [] };
 
@@ -157,6 +163,7 @@ export async function resolveTailwindConfig(projectRoot: string): Promise<any> {
         const fullConfig = resolveConfig(config as any);
         console.log('[resolveTailwindConfig] Full config resolved successfully');
         console.log('[resolveTailwindConfig] Theme keys count:', fullConfig?.theme ? Object.keys(fullConfig.theme).length : 0);
+        console.log('[resolveTailwindConfig] Theme colors:', fullConfig?.theme?.colors ? Object.keys(fullConfig.theme.colors) : 'none');
 
         return fullConfig;
     } catch (error) {

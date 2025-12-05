@@ -265,6 +265,27 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         return;
       }
 
+      // 监听 tailwind.config.js 文件变化，清除缓存
+      const tailwindConfigPath = resolve(projectRoot, 'tailwind.config.js');
+      const tailwindConfigTsPath = resolve(projectRoot, 'tailwind.config.ts');
+
+      server.watcher.on('change', (file) => {
+        if (file === tailwindConfigPath || file === tailwindConfigTsPath) {
+          console.log('[VITE PLUGIN] Tailwind config changed, clearing cache...');
+          tailwindConfigCache = null;
+
+          // 触发虚拟模块重新加载
+          const module = server.moduleGraph.getModuleById(RESOLVED_TAILWIND_CONFIG_MODULE_ID);
+          if (module) {
+            server.moduleGraph.invalidateModule(module);
+            server.ws.send({
+              type: 'full-reload',
+              path: '*'
+            });
+          }
+        }
+      });
+
       // Register client code middleware
       server.middlewares.use(async (req, res, next) => {
         // 匹配客户端代码请求（支持带或不带 base 路径）
