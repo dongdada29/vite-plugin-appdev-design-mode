@@ -284,7 +284,12 @@ export const DesignModeProvider: React.FC<{
       const element = document.querySelector(selector);
       if (element) return element as HTMLElement;
 
-      // 3. 扫描所有带有 info 属性的元素 (最慢，但作为后备方案)
+      // 3. 尝试通过 children-source 查找 (用于查找 pass-through 内容的宿主元素)
+      const childrenSourceValue = `${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`;
+      const elementByChildrenSource = document.querySelector(`[${AttributeNames.childrenSource}="${childrenSourceValue}"]`);
+      if (elementByChildrenSource) return elementByChildrenSource as HTMLElement;
+
+      // 4. 扫描所有带有 info 属性的元素 (最慢，但作为后备方案)
       const allElements = document.querySelectorAll(`[${AttributeNames.info}]`);
       for (let i = 0; i < allElements.length; i++) {
         const el = allElements[i] as HTMLElement;
