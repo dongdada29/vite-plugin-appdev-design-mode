@@ -814,7 +814,7 @@ async function smartReplaceStyle(line: string, options: any): Promise<string> {
   // 4. 如果都无法匹配（例如不在标签行），为了安全起见，返回原行
   // 绝对不要直接返回 newValue，否则会覆盖整行代码
   console.warn('[DesignMode] Failed to match className or tag in line:', line);
-  return line;
+  throw new Error('Cannot find a valid location to insert className. The component might not support styling or has complex syntax.');
 }
 
 // 智能内容替换

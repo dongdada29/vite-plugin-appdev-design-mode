@@ -8,6 +8,8 @@ export interface SourceInfo {
   componentName?: string;
   functionName?: string;
   elementId?: string;
+  importPath?: string;
+  isUIComponent?: boolean; // 标记是否是 UI 组件（components/ui 目录下的组件）
 }
 
 export interface ElementInfo {
@@ -16,6 +18,15 @@ export interface ElementInfo {
   textContent: string;
   sourceInfo: SourceInfo;
   isStaticText: boolean;
+  isStaticClass?: boolean; // 标记 className 是否是纯静态字符串（可编辑）
+  componentName?: string;
+  componentPath?: string;
+  props?: Record<string, string>;
+  hierarchy?: {
+    tagName: string;
+    componentName?: string;
+    fileName?: string;
+  }[];
 }
 
 // 消息验证相关类型

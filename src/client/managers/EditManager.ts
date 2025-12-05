@@ -71,7 +71,7 @@ export class EditManager {
       element.removeEventListener('blur', handleSave);
       element.removeEventListener('input', handleInput);
       element.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside, true);
 
       // 如果内容有变化，更新 DOM 并发送最终消息
       if (newText !== originalText.trim()) {
@@ -105,7 +105,7 @@ export class EditManager {
       element.removeEventListener('blur', handleSave);
       element.removeEventListener('input', handleInput);
       element.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside, true);
     };
 
     // 处理点击外部
@@ -393,7 +393,8 @@ export class EditManager {
     // 获取参考元素的关键属性
     const elementId = element.getAttribute(AttributeNames.elementId);
     const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
-    const refFileName = element.getAttribute(AttributeNames.file);
+    const refSourceInfo = extractSourceInfo(element);
+    const refFileName = refSourceInfo?.fileName;
 
     if (!elementId) {
       console.warn('[EditManager] Element missing element-id attribute:', element);
@@ -409,7 +410,8 @@ export class EditManager {
     return allElementsWithId.filter(el => {
       const elId = el.getAttribute(AttributeNames.elementId);
       const elHasStaticContent = el.hasAttribute(AttributeNames.staticContent);
-      const elFileName = el.getAttribute(AttributeNames.file);
+      const elSourceInfo = extractSourceInfo(el);
+      const elFileName = elSourceInfo?.fileName;
 
       // 1. element-id 必须相同
       if (elId !== elementId) return false;

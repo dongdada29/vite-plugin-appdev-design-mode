@@ -94,7 +94,7 @@ export default function IframeDemoPage() {
         case 'STYLE_UPDATED':
           console.log('[Parent] Style updated:', payload);
           break;
-        
+
       }
     };
 
@@ -407,15 +407,71 @@ export default function IframeDemoPage() {
                     <h3 className='text-sm font-semibold text-blue-900 mb-2'>
                       选中元素
                     </h3>
-                    <div className='text-xs text-blue-700 space-y-1'>
-                      <div>
-                        <span className='font-medium'>标签:</span>{' '}
-                        {selectedElement.tagName}
+                    <div className='text-xs text-blue-700 space-y-2'>
+                      {/* 基本信息 */}
+                      <div className="bg-blue-50 p-2 rounded">
+                        <div className="font-semibold mb-1">基本信息</div>
+                        <div><span className='font-medium'>标签:</span> {selectedElement.tagName}</div>
+                        {selectedElement.sourceInfo.elementType && selectedElement.sourceInfo.elementType !== selectedElement.tagName && (
+                          <div><span className='font-medium'>组件类型:</span> {selectedElement.sourceInfo.elementType}</div>
+                        )}
+                        {selectedElement.componentName && (
+                          <div><span className='font-medium'>所属组件:</span> {selectedElement.componentName}</div>
+                        )}
+                        {selectedElement.sourceInfo.importPath && (
+                          <div className='break-all'>
+                            <span className='font-medium'>组件定义:</span>{' '}
+                            <span className="text-gray-600">{selectedElement.sourceInfo.importPath}</span>
+                          </div>
+                        )}
+                        <div className='break-all'>
+                          <span className='font-medium'>使用位置:</span>{' '}
+                          {selectedElement.sourceInfo.fileName.split('/').pop()}
+                        </div>
+                        <div className='text-gray-500 text-[10px] break-all'>
+                          {selectedElement.sourceInfo.fileName}
+                        </div>
                       </div>
-                      <div className='break-all'>
-                        <span className='font-medium'>文件:</span>{' '}
-                        {selectedElement.sourceInfo.fileName.split('/').pop()}
-                      </div>
+
+                      {/* 属性列表 */}
+                      {selectedElement.props && Object.keys(selectedElement.props).length > 0 && (
+                        <div className="bg-blue-50 p-2 rounded">
+                          <div className="font-semibold mb-1">属性 (Props)</div>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {Object.entries(selectedElement.props).map(([key, value]) => (
+                              <div key={key} className="flex gap-1">
+                                <span className="font-medium text-blue-800">{key}:</span>
+                                <span className="truncate text-gray-600" title={value as string}>
+                                  {value as string}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 组件层级 */}
+                      {selectedElement.hierarchy && selectedElement.hierarchy.length > 0 && (
+                        <div className="bg-blue-50 p-2 rounded">
+                          <div className="font-semibold mb-1">组件层级</div>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {selectedElement.hierarchy.map((item, index) => (
+                              <div key={index} className="pl-2 border-l-2 border-blue-200 text-[10px]">
+                                {item.componentName ? (
+                                  <span className="font-bold text-blue-800">{item.componentName}</span>
+                                ) : (
+                                  <span className="text-gray-500">{item.tagName}</span>
+                                )}
+                                {item.fileName && (
+                                  <span className="ml-1 text-gray-400">
+                                    ({item.fileName.split('/').pop()})
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -497,7 +553,7 @@ export default function IframeDemoPage() {
             <div className='h-full bg-white rounded-lg shadow-xl overflow-hidden'>
               <iframe
                 ref={iframeRef}
-                src={window.location.origin}
+                src={'http://localhost:3001/'}
                 className='w-full h-full'
                 title='设计模式 Iframe 演示'
               />

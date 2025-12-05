@@ -11,6 +11,7 @@ import {
 import { AttributeNames } from './utils/attributeNames';
 import { isPureStaticText } from './utils/elementUtils';
 import { resolveSourceInfo } from './utils/sourceInfoResolver';
+import { extractSourceInfo } from './utils/sourceInfo';
 
 export const DesignModeBridge: React.FC = () => {
   const { selectedElement, modifyElementClass, updateElementContent } =
@@ -68,6 +69,7 @@ export const DesignModeBridge: React.FC = () => {
         // 使用 resolveSourceInfo 来获取正确的源位置
         // 对于pass-through组件，会向上查找使用位置
         const sourceInfo = resolveSourceInfo(selectedElement);
+        // console.log('[DesignModeBridge] resolveSourceInfo', window.location.href, sourceInfo);
 
         // 确保我们有有效的元素数据
         // 判断是否为静态文本：
@@ -76,6 +78,10 @@ export const DesignModeBridge: React.FC = () => {
         const hasStaticContentAttr = selectedElement.hasAttribute(AttributeNames.staticContent);
         const isActuallyPureText = isPureStaticText(selectedElement);
         const isStaticText = hasStaticContentAttr && isActuallyPureText;
+
+        // 判断是否为静态 className：
+        // 检查元素是否有 static-class 属性（表示 className 是纯静态字符串，可编辑）
+        const isStaticClass = selectedElement.hasAttribute(AttributeNames.staticClass);
 
         const elementData = {
           tagName: selectedElement.tagName.toLowerCase(),
@@ -91,6 +97,7 @@ export const DesignModeBridge: React.FC = () => {
             columnNumber: 0,
           },
           isStaticText: isStaticText || false, // 默认为 false
+          isStaticClass: isStaticClass, // 标记 className 是否可编辑
         };
 
         if (
@@ -124,17 +131,12 @@ export const DesignModeBridge: React.FC = () => {
 
       if (selectedElement && payload?.sourceInfo && payload?.newClass) {
         // 验证源信息是否匹配
-        const elementSourceInfo = {
-          fileName: selectedElement.getAttribute(AttributeNames.file) || '',
-          lineNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.line) || '0',
-            10
-          ),
-          columnNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.column) || '0',
-            10
-          ),
-        };
+        const elementSourceInfo = extractSourceInfo(selectedElement);
+
+        if (!elementSourceInfo) {
+          console.warn('[DesignModeBridge] Selected element missing source info');
+          return;
+        }
 
         const sourceMatches =
           elementSourceInfo.fileName === payload.sourceInfo.fileName &&
@@ -160,17 +162,12 @@ export const DesignModeBridge: React.FC = () => {
         payload?.newContent !== undefined
       ) {
         // 验证源信息是否匹配
-        const elementSourceInfo = {
-          fileName: selectedElement.getAttribute(AttributeNames.file) || '',
-          lineNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.line) || '0',
-            10
-          ),
-          columnNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.column) || '0',
-            10
-          ),
-        };
+        const elementSourceInfo = extractSourceInfo(selectedElement);
+
+        if (!elementSourceInfo) {
+          console.warn('[DesignModeBridge] Selected element missing source info');
+          return;
+        }
 
         const sourceMatches =
           elementSourceInfo.fileName === payload.sourceInfo.fileName &&

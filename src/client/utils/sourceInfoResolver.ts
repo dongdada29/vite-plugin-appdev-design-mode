@@ -3,13 +3,64 @@ import { AttributeNames } from './attributeNames';
 import { extractSourceInfo } from './sourceInfo';
 
 /**
+ * 在元素的子元素中查找来自不同文件的第一个元素
+ * 这用于识别组件包装器（如Button组件的button元素）
+ * 
+ * @param element 父元素
+ * @param currentFile 当前元素的文件路径
+ * @returns 第一个来自不同文件的子元素，如果没有找到则返回null
+ */
+function findChildFromDifferentFile(element: HTMLElement, currentFile: string): HTMLElement | null {
+    // 使用广度优先搜索查找第一个来自不同文件的子元素
+    const queue: HTMLElement[] = [];
+
+    // 添加直接子元素到队列
+    for (let i = 0; i < element.children.length; i++) {
+        const child = element.children[i];
+        if (child instanceof HTMLElement) {
+            queue.push(child);
+        }
+    }
+
+    let depth = 0;
+    const maxDepth = 5; // 限制搜索深度，避免性能问题
+
+    while (queue.length > 0 && depth < maxDepth) {
+        const levelSize = queue.length;
+
+        for (let i = 0; i < levelSize; i++) {
+            const child = queue.shift();
+            if (!child) continue;
+
+            const childInfo = extractSourceInfo(child);
+            if (childInfo && childInfo.fileName !== currentFile) {
+                return child;
+            }
+
+            // 添加子元素的子元素到队列
+            for (let j = 0; j < child.children.length; j++) {
+                const grandChild = child.children[j];
+                if (grandChild instanceof HTMLElement) {
+                    queue.push(grandChild);
+                }
+            }
+        }
+
+        depth++;
+    }
+
+    return null;
+}
+
+/**
  * 解析元素的正确源代码位置
  * 
  * 对于pass-through组件（有static-content属性的元素），需要找到使用位置而不是组件定义位置
  * 
  * 规则：
  * 1. 如果元素有static-content属性，说明它的内容是静态的，来自使用位置
- * 2. 我们需要向上查找父元素，找到第一个：
+ * 2. 如果元素的子元素来自不同文件，说明这是一个组件包装器，应使用子元素的文件位置
+ * 3. 我们需要向上查找父元素，找到第一个：
  *    - 没有static-content属性的元素（说明它是组件使用位置）
  *    - 或者文件路径与当前元素不同的元素（说明跨越了组件边界）
  * 
@@ -18,8 +69,40 @@ import { extractSourceInfo } from './sourceInfo';
  */
 export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
     const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
+    const currentInfo = extractSourceInfo(element);
+    const currentFile = currentInfo?.fileName;
 
-    // 优先检查 children-source 属性
+    // 1. 如果当前元素来自 UI 组件（isUIComponent 标记），向上查找使用位置
+    // 这样 Button.tsx 等 UI 组件会显示其在 Home.tsx 中的使用位置
+    // console.log('[resolveSourceInfo] currentInfo:', window.location.href, currentInfo);
+    // console.log('[resolveSourceInfo] isUIComponent:', window.location.href, currentInfo?.isUIComponent);
+
+    if (currentInfo?.isUIComponent) {
+        // console.log('[resolveSourceInfo] Detected UI component, looking for usage location...');
+        let parent = element.parentElement;
+        let depth = 0;
+        while (parent && depth < 20) {
+            const parentInfo = extractSourceInfo(parent);
+            // console.log('[resolveSourceInfo] Parent depth', depth, ':', parentInfo?.fileName, 'isUIComponent:', parentInfo?.isUIComponent);
+            // 找到第一个非 UI 组件的父元素
+            if (parentInfo?.fileName && !parentInfo.isUIComponent) {
+                // console.log('[resolveSourceInfo] Found usage location:', parentInfo.fileName, parentInfo.lineNumber);
+                return {
+                    fileName: parentInfo.fileName,
+                    lineNumber: parentInfo.lineNumber,
+                    columnNumber: parentInfo.columnNumber,
+                    elementType: element.tagName?.toLowerCase() || 'unknown',
+                    componentName: currentInfo?.componentName,
+                    functionName: currentInfo?.functionName
+                };
+            }
+            parent = parent.parentElement;
+            depth++;
+        }
+        // console.log('[resolveSourceInfo] No non-UI parent found, falling through...');
+    }
+
+    // 2. 优先检查 children-source 属性
     // 这个属性记录了静态文本children的真实来源位置
     // 尝试多种可能的前缀，以防配置不一致
     const candidates = [
@@ -51,8 +134,29 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
                     lineNumber,
                     columnNumber,
                     elementType: element.tagName?.toLowerCase() || 'unknown',
-                    componentName: element.getAttribute(AttributeNames.component) || undefined,
-                    functionName: element.getAttribute(AttributeNames.function) || undefined
+                    componentName: currentInfo?.componentName,
+                    functionName: currentInfo?.functionName
+                };
+            }
+        }
+    }
+
+    // 3. 检查子元素是否来自不同文件（说明这是一个组件包装器）
+    // 例如：Button 组件的 <button> 元素包含来自 Home.tsx 的 <a> 子元素
+    if (currentFile) {
+        const childWithDifferentSource = findChildFromDifferentFile(element, currentFile);
+        if (childWithDifferentSource) {
+            const childInfo = extractSourceInfo(childWithDifferentSource);
+            if (childInfo && childInfo.fileName !== currentFile) {
+                // 找到了来自不同文件的子元素，使用子元素的文件信息作为使用位置
+                // 但仍然使用当前元素的行/列信息来标识元素本身
+                return {
+                    fileName: childInfo.fileName,
+                    lineNumber: childInfo.lineNumber,
+                    columnNumber: childInfo.columnNumber,
+                    elementType: element.tagName?.toLowerCase() || 'unknown',
+                    componentName: currentInfo?.componentName,
+                    functionName: currentInfo?.functionName
                 };
             }
         }
@@ -64,7 +168,6 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
     }
 
     // 有static-content属性，说明这是组件内部的元素，需要找到使用位置
-    const currentFile = element.getAttribute(AttributeNames.file);
     let currentElement: HTMLElement | null = element;
     let depth = 0;
 
@@ -75,7 +178,8 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
             break;
         }
 
-        const parentFile = parent.getAttribute(AttributeNames.file);
+        const parentInfo = extractSourceInfo(parent);
+        const parentFile = parentInfo?.fileName;
         const parentHasStaticContent = parent.hasAttribute(AttributeNames.staticContent);
 
         // 检查是否找到了使用位置：
@@ -85,7 +189,7 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
         //    b) 父元素的文件与当前文件不同（跨越了组件边界）
         if (parentFile && (!parentHasStaticContent || parentFile !== currentFile)) {
             // 找到了使用位置，返回父元素的源信息
-            return extractSourceInfo(parent);
+            return parentInfo;
         }
 
         currentElement = parent;
@@ -103,7 +207,8 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
  */
 export function isInComponentDefinition(element: HTMLElement): boolean {
     const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
-    const sourceFile = element.getAttribute(AttributeNames.file);
+    const sourceInfo = extractSourceInfo(element);
+    const sourceFile = sourceInfo?.fileName;
 
     if (!hasStaticContent || !sourceFile) {
         return false;
@@ -115,9 +220,11 @@ export function isInComponentDefinition(element: HTMLElement): boolean {
         return false;
     }
 
-    const parentFile = parent.getAttribute(AttributeNames.file);
+    const parentInfo = extractSourceInfo(parent);
+    const parentFile = parentInfo?.fileName;
     const parentHasStaticContent = parent.hasAttribute(AttributeNames.staticContent);
 
     // 如果父元素也有static-content且文件相同，说明在组件定义内部
     return parentHasStaticContent && parentFile === sourceFile;
 }
+

@@ -180,6 +180,7 @@ export class SelectionManager {
 
   /**
    * 检查元素是否有效可选择
+   * 只有具有静态文本或静态 className 的元素才能被选中
    */
   private isValidElement(element: HTMLElement): boolean {
     if (!element || !element.tagName) return false;
@@ -197,7 +198,27 @@ export class SelectionManager {
     // 如果设置了只包含元素类型限制
     if (this.config.includeOnlyElements) {
       const validElements = ['DIV', 'SPAN', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BUTTON', 'A'];
-      return validElements.includes(element.tagName);
+      if (!validElements.includes(element.tagName)) {
+        return false;
+      }
+    }
+
+    // 检查元素是否有源码映射信息
+    if (!element.hasAttribute(AttributeNames.info)) {
+      return false;
+    }
+
+    // 只有具有静态文本或静态 className 的元素才能被选中
+    // 如果元素既没有 static-content 也没有 static-class 属性，则不可选中
+    const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
+    const hasStaticClass = element.hasAttribute(AttributeNames.staticClass);
+
+    console.log('hasStaticContent', element, hasStaticContent);
+    console.log('hasStaticClass', element, hasStaticClass);
+
+    if (!hasStaticContent && !hasStaticClass) {
+      // 该元素的内容和样式都是动态的，不可选中
+      return false;
     }
 
     return true;
@@ -327,49 +348,6 @@ export class SelectionManager {
   }
 
   /**
-   * 提取元素的完整信息
-   */
-  public extractElementInfo(element: HTMLElement): ElementInfo | null {
-    if (!element) return null;
-
-    const sourceInfo = this.extractSourceInfo(element);
-    if (!sourceInfo) {
-      console.warn('[SelectionManager] Element has no source mapping:', element);
-      return null;
-    }
-
-    // 计算元素的边界框信息
-    const rect = element.getBoundingClientRect();
-    const computedStyle = window.getComputedStyle(element);
-
-    // 判断是否为静态文本：
-    // 1. 检查元素是否有 static-content 属性
-    // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
-    const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
-    const isActuallyPureText = isPureStaticText(element);
-    const isStaticText = hasStaticContentAttr && isActuallyPureText;
-
-    // 获取文本内容：如果是静态文本，使用专门的方法获取；否则也返回内容（用于显示）
-    let textContent = '';
-    if (isStaticText) {
-      // 对于静态文本，使用专门的方法获取文本内容
-      textContent = this.getElementTextContent(element);
-    } else {
-      // 对于非静态文本，也返回内容（可能为空，但至少尝试获取）
-      textContent = element.innerText || element.textContent || '';
-    }
-
-    // Note: elementId is not part of ElementInfo anymore
-    return {
-      tagName: element.tagName.toLowerCase(),
-      className: element.className || '',
-      textContent: textContent,
-      sourceInfo,
-      isStaticText: isStaticText || false, // 默认为 false
-    };
-  }
-
-  /**
    * 提取元素的源码信息
    */
   private extractSourceInfo(element: HTMLElement): SourceInfo | null {
@@ -381,7 +359,10 @@ export class SelectionManager {
         return {
           fileName: sourceInfo.fileName,
           lineNumber: sourceInfo.lineNumber,
-          columnNumber: sourceInfo.columnNumber
+          columnNumber: sourceInfo.columnNumber,
+          componentName: sourceInfo.componentName,
+          elementType: sourceInfo.elementType,
+          importPath: sourceInfo.importPath
         };
       } catch (e) {
         console.warn('[SelectionManager] Failed to parse source info:', e);
@@ -392,16 +373,122 @@ export class SelectionManager {
     const fileName = element.getAttribute(AttributeNames.file);
     const lineStr = element.getAttribute(AttributeNames.line);
     const columnStr = element.getAttribute(AttributeNames.column);
+    const componentName = element.getAttribute(AttributeNames.component) || undefined;
+    const importPath = element.getAttribute(AttributeNames.import) || undefined;
 
     if (fileName && lineStr && columnStr) {
       return {
         fileName,
         lineNumber: parseInt(lineStr, 10),
-        columnNumber: parseInt(columnStr, 10)
+        columnNumber: parseInt(columnStr, 10),
+        componentName,
+        importPath
       };
     }
 
     return null;
+  }
+
+  /**
+   * 查找组件根元素
+   * 如果当前元素属于某个组件库组件（如 src/components/ui），则向上查找该组件的根元素
+   */
+  private findComponentRoot(element: HTMLElement): HTMLElement {
+    const sourceInfo = this.extractSourceInfo(element);
+    if (!sourceInfo || !sourceInfo.fileName) return element;
+
+    // 检查是否是组件库文件
+    const isLibraryComponent = sourceInfo.fileName.includes('/components/ui/') ||
+      sourceInfo.fileName.includes('/components/common/'); // 可配置
+
+    if (!isLibraryComponent) return element;
+
+    // 向上查找，直到找到一个元素，其文件路径与当前元素不同，或者没有源码信息
+    // 该元素的子元素（即当前遍历到的元素）就是组件的根
+    let current = element;
+    let componentRoot = element;
+
+    while (current.parentElement) {
+      const parent = current.parentElement;
+      const parentSourceInfo = this.extractSourceInfo(parent);
+
+      // 如果父元素没有源码信息，或者父元素在不同的文件中，那么当前元素就是组件根
+      if (!parentSourceInfo || parentSourceInfo.fileName !== sourceInfo.fileName) {
+        componentRoot = current;
+        break;
+      }
+
+      current = parent;
+    }
+
+    return componentRoot;
+  }
+
+  /**
+   * 提取元素的完整信息
+   */
+  public extractElementInfo(element: HTMLElement): ElementInfo | null {
+    if (!element) return null;
+
+    // 优先选择组件根元素
+    const targetElement = this.findComponentRoot(element);
+    const sourceInfo = this.extractSourceInfo(targetElement);
+
+    if (!sourceInfo) {
+      console.warn('[SelectionManager] Element has no source mapping:', targetElement);
+      return null;
+    }
+
+    // 计算元素的边界框信息
+    const rect = targetElement.getBoundingClientRect();
+    const computedStyle = window.getComputedStyle(targetElement);
+
+    // 判断是否为静态文本
+    const hasStaticContentAttr = targetElement.hasAttribute(AttributeNames.staticContent);
+    const isActuallyPureText = isPureStaticText(targetElement);
+    const isStaticText = hasStaticContentAttr && isActuallyPureText;
+
+    // 判断是否为静态 className
+    const isStaticClass = targetElement.hasAttribute(AttributeNames.staticClass);
+
+    // 获取文本内容
+    let textContent = '';
+    if (isStaticText) {
+      textContent = this.getElementTextContent(targetElement);
+    } else {
+      textContent = targetElement.innerText || targetElement.textContent || '';
+    }
+
+    // 提取组件层级
+    const hierarchy: { tagName: string; componentName?: string; fileName?: string }[] = [];
+    let current: HTMLElement | null = targetElement;
+    while (current && current !== document.body) {
+      const info = this.extractSourceInfo(current);
+      if (info) {
+        hierarchy.push({
+          tagName: current.tagName.toLowerCase(),
+          componentName: info.componentName,
+          fileName: info.fileName
+        });
+      }
+      current = current.parentElement;
+    }
+
+    // 提取属性（作为 props 的近似）
+    const props = this.getElementAttributes(targetElement);
+
+    return {
+      tagName: targetElement.tagName.toLowerCase(),
+      className: targetElement.className || '',
+      textContent: textContent,
+      sourceInfo,
+      isStaticText: isStaticText || false,
+      isStaticClass: isStaticClass, // 标记 className 是否可编辑
+      componentName: sourceInfo.componentName,
+      componentPath: sourceInfo.fileName,
+      props,
+      hierarchy
+    };
   }
 
   /**

@@ -12,7 +12,10 @@ export interface SourceMappingInfo {
   functionName?: string;
   elementId: string;
   attributePrefix: string;
+  importPath?: string; // 新增：组件导入路径
+  isUIComponent?: boolean; // 新增：是否是 UI 组件（components/ui 目录下的组件）
 }
+
 
 export interface JSXElementWithLoc extends t.JSXOpeningElement {
   loc: t.SourceLocation;
@@ -23,6 +26,15 @@ type PluginItem = any;
 type NodePath = any;
 
 /**
+ * 检查文件路径是否是 UI 组件（components/ui 目录下的组件）
+ * 这些组件在运行时应该显示其使用位置而非定义位置
+ */
+function isUIComponentFile(filePath: string): boolean {
+  // 匹配 /components/ui/ 或 \components\ui\ 路径
+  return /[/\\]components[/\\]ui[/\\]/.test(filePath);
+}
+
+/**
  * 创建源码映射Babel插件
  */
 export function createSourceMappingPlugin(
@@ -30,9 +42,31 @@ export function createSourceMappingPlugin(
   options: Required<DesignModeOptions>
 ): PluginItem {
   const { attributePrefix } = options;
+  const imports: Record<string, string> = {}; // 存储导入映射：组件名 -> 导入路径
 
   return {
     visitor: {
+      // 1. 收集导入信息
+      ImportDeclaration(path: NodePath) {
+        const { node } = path;
+        const sourceValue = node.source.value; // 导入路径，例如 "@/components/ui/button"
+
+        node.specifiers.forEach((specifier: any) => {
+          if (t.isImportSpecifier(specifier)) {
+            // import { Button } from ...
+            imports[specifier.local.name] = sourceValue;
+            // console.log(`[DesignMode] Found import: ${specifier.local.name} from ${sourceValue}`);
+          } else if (t.isImportDefaultSpecifier(specifier)) {
+            // import Button from ...
+            imports[specifier.local.name] = sourceValue;
+            // console.log(`[DesignMode] Found default import: ${specifier.local.name} from ${sourceValue}`);
+          } else if (t.isImportNamespaceSpecifier(specifier)) {
+            // import * as UI from ...
+            imports[specifier.local.name] = sourceValue;
+          }
+        });
+      },
+
       JSXOpeningElement(path: NodePath) {
         const { node } = path;
 
@@ -42,18 +76,38 @@ export function createSourceMappingPlugin(
 
         // 获取组件信息
         const componentInfo = extractComponentInfo(path);
+        const elementType = getJSXElementName(node.name);
+
+        // 查找导入路径
+        // 如果是成员表达式 (e.g. UI.Button)，只查找对象部分 (UI)
+        let importPath: string | undefined;
+        if (t.isJSXIdentifier(node.name)) {
+          importPath = imports[node.name.name];
+        } else if (t.isJSXMemberExpression(node.name) && t.isJSXIdentifier(node.name.object)) {
+          importPath = imports[node.name.object.name];
+        }
+
+        // if (importPath) {
+        //   console.log(`[DesignMode] Injecting importPath for ${elementType}: ${importPath}`);
+        // }
+
+        // 检查当前文件是否是 UI 组件
+        const isUIComponent = isUIComponentFile(fileName);
 
         // 构建源码位置信息
         const sourceInfo: SourceMappingInfo = {
           fileName: fileName,
           lineNumber: location.start.line,
           columnNumber: location.start.column,
-          elementType: getJSXElementName(node.name),
+          elementType: elementType,
           componentName: componentInfo.componentName,
           functionName: componentInfo.functionName,
           elementId: generateElementId(node, fileName, location),
-          attributePrefix
+          attributePrefix,
+          importPath, // 注入导入路径
+          isUIComponent // 标记是否是 UI 组件
         };
+
 
         // 添加源码信息属性（使用配置的前缀）
         addSourceInfoAttribute(node, sourceInfo, options);
@@ -64,12 +118,17 @@ export function createSourceMappingPlugin(
         // 添加元素ID属性
         addElementIdAttribute(node, sourceInfo, options);
 
-        // 添加单独的属性以便于查询
-        addIndividualAttributes(node, sourceInfo, options);
+        // 移除单独的属性以减少 DOM 体积（所有信息已包含在 info 属性中）
+        // addIndividualAttributes(node, sourceInfo, options);
 
         // Check if content is static and add attribute
         if (isStaticContent(path)) {
           addStaticContentAttribute(node, path, options);
+        }
+
+        // Check if className is static (pure string literal) and add attribute
+        if (isStaticClassName(node)) {
+          addStaticClassAttribute(node, options);
         }
       },
 
@@ -171,16 +230,17 @@ function generateElementId(node: t.JSXOpeningElement, fileName: string, location
   const tagName = getJSXElementName(node.name);
 
   // 提取关键属性
-  const className = extractStringAttribute(node, 'className');
+  // const className = extractStringAttribute(node, 'className'); // 移除 className 以缩短 ID
   const id = extractStringAttribute(node, 'id');
 
   // 构建唯一标识符
   const baseId = `${fileName}:${location.start.line}:${location.start.column}`;
   const tag = tagName.toLowerCase();
-  const cls = className ? className.replace(/\s+/g, '-') : '';
+  // const cls = className ? className.replace(/\s+/g, '-') : ''; // 移除 className
   const elementId = id ? `#${id}` : '';
 
-  return `${baseId}_${tag}${cls ? '_' + cls : ''}${elementId}`;
+  // return `${baseId}_${tag}${cls ? '_' + cls : ''}${elementId}`;
+  return `${baseId}_${tag}${elementId}`;
 }
 
 /**
@@ -219,7 +279,9 @@ function addSourceInfoAttribute(node: t.JSXOpeningElement, sourceInfo: SourceMap
       elementType: sourceInfo.elementType,
       componentName: sourceInfo.componentName,
       functionName: sourceInfo.functionName,
-      elementId: sourceInfo.elementId
+      elementId: sourceInfo.elementId,
+      importPath: sourceInfo.importPath, // 包含导入路径
+      isUIComponent: sourceInfo.isUIComponent // 标记是否是 UI 组件
     }))
   );
 
@@ -288,6 +350,7 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
   addAttr(`${attributePrefix}-column`, sourceInfo.columnNumber);
   addAttr(`${attributePrefix}-component`, sourceInfo.componentName);
   addAttr(`${attributePrefix}-function`, sourceInfo.functionName);
+  addAttr(`${attributePrefix}-import`, sourceInfo.importPath); // 添加导入路径
 }
 
 /**
@@ -337,6 +400,84 @@ function addStaticContentAttribute(node: t.JSXOpeningElement, path: NodePath, op
   if (!isStaticContent(path)) {
     return; // 如果不是纯静态文本，不添加属性
   }
+
+  // Check if attribute already exists
+  const hasAttr = node.attributes.some(a =>
+    t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === attributeName
+  );
+
+  if (!hasAttr) {
+    node.attributes.unshift(t.jSXAttribute(
+      t.jSXIdentifier(attributeName),
+      t.stringLiteral('true')
+    ));
+  }
+}
+
+/**
+ * Check if the className attribute is static (pure string literal)
+ * className 是静态的条件：
+ * 1. className 属性值是字符串字面量（如 className="text-lg"）
+ * 2. 或者 className 属性不存在（也认为是可编辑的）
+ * 
+ * className 不是静态的条件（包含变量/表达式）：
+ * 1. className={someVariable}
+ * 2. className={`template ${variable}`}
+ * 3. className={condition ? 'a' : 'b'}
+ * 4. className={cn('base', variable)}
+ */
+function isStaticClassName(node: t.JSXOpeningElement): boolean {
+  // 查找 className 属性
+  const classNameAttr = node.attributes.find(attr =>
+    t.isJSXAttribute(attr) &&
+    t.isJSXIdentifier(attr.name) &&
+    attr.name.name === 'className'
+  ) as t.JSXAttribute | undefined;
+
+  // 如果没有 className 属性，认为是静态的（可以添加新的 className）
+  if (!classNameAttr) {
+    return true;
+  }
+
+  const value = classNameAttr.value;
+
+  // 如果值是字符串字面量，是静态的
+  if (t.isStringLiteral(value)) {
+    return true;
+  }
+
+  // 如果值是表达式容器
+  if (t.isJSXExpressionContainer(value)) {
+    const expression = value.expression;
+
+    // 字符串字面量也可以写在表达式容器中：className={"text-lg"}
+    if (t.isStringLiteral(expression)) {
+      return true;
+    }
+
+    // 模板字面量不包含任何表达式时也是静态的：className={`text-lg font-bold`}
+    if (t.isTemplateLiteral(expression)) {
+      // 检查模板字面量是否只有静态部分（没有 ${} 表达式）
+      if (expression.expressions.length === 0) {
+        return true;
+      }
+    }
+
+    // 其他所有情况都认为是动态的（包含变量）
+    return false;
+  }
+
+  // 其他情况（如 null, undefined 等）认为是静态的
+  return true;
+}
+
+/**
+ * Add static-class attribute (使用配置的前缀)
+ * 只有在 className 是纯静态字符串时才会添加此属性
+ */
+function addStaticClassAttribute(node: t.JSXOpeningElement, options: Required<DesignModeOptions>) {
+  const { attributePrefix } = options;
+  const attributeName = `${attributePrefix}-static-class`;
 
   // Check if attribute already exists
   const hasAttr = node.attributes.some(a =>

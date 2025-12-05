@@ -25,6 +25,7 @@ import { bridge, messageValidator } from './bridge';
 import { AttributeNames } from './utils/attributeNames';
 import { isPureStaticText } from './utils/elementUtils';
 import { extractSourceInfo } from './utils/sourceInfo';
+import { resolveSourceInfo } from './utils/sourceInfoResolver';
 
 export interface Modification {
   id: string;
@@ -268,6 +269,53 @@ export const DesignModeProvider: React.FC<{
   );
 
   /**
+   * 根据源码信息查找元素
+   */
+  const findElementBySourceInfo = useCallback(
+    (sourceInfo: SourceInfo): HTMLElement | null => {
+      // 1. 尝试通过 elementId 查找 (最快)
+      if (sourceInfo.elementId) {
+        const element = document.querySelector(`[${AttributeNames.elementId}="${sourceInfo.elementId}"]`);
+        if (element) return element as HTMLElement;
+      }
+
+      // 2. 尝试通过 file/line/column 属性查找 (如果存在)
+      const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
+      const element = document.querySelector(selector);
+      if (element) return element as HTMLElement;
+
+      // 3. 尝试通过 children-source 查找 (用于查找 pass-through 内容的宿主元素)
+      const childrenSourceValue = `${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`;
+      const elementByChildrenSource = document.querySelector(`[${AttributeNames.childrenSource}="${childrenSourceValue}"]`);
+      if (elementByChildrenSource) return elementByChildrenSource as HTMLElement;
+
+      // 4. 扫描所有带有 info 属性的元素 (最慢，但作为后备方案)
+      const allElements = document.querySelectorAll(`[${AttributeNames.info}]`);
+      for (let i = 0; i < allElements.length; i++) {
+        const el = allElements[i] as HTMLElement;
+        try {
+          const infoStr = el.getAttribute(AttributeNames.info);
+          if (infoStr) {
+            const info = JSON.parse(infoStr);
+            if (
+              info.fileName === sourceInfo.fileName &&
+              info.lineNumber === sourceInfo.lineNumber &&
+              info.columnNumber === sourceInfo.columnNumber
+            ) {
+              return el;
+            }
+          }
+        } catch (e) {
+          // ignore parse error
+        }
+      }
+
+      return null;
+    },
+    []
+  );
+
+  /**
    * 处理外部样式更新
    */
   const handleExternalStyleUpdate = useCallback(
@@ -289,19 +337,11 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-
-        const element = document.querySelector(selector) as HTMLElement;
+        const element = findElementBySourceInfo(sourceInfo);
         if (!element) {
           console.error(
             '[DesignMode] Element not found for sourceInfo:',
-            sourceInfo,
-            'Selector:',
-            selector
-          );
-          // 尝试查找所有带有 file 属性的元素
-          const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            sourceInfo
           );
 
           sendToParent({
@@ -309,7 +349,7 @@ export const DesignModeProvider: React.FC<{
             payload: {
               code: 'ELEMENT_NOT_FOUND',
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
-              details: { sourceInfo, selector },
+              details: { sourceInfo },
             },
             timestamp: Date.now(),
           });
@@ -321,13 +361,13 @@ export const DesignModeProvider: React.FC<{
         // 查找所有具有相同 element-id 的元素（列表项同步）
         const elementId = element.getAttribute(AttributeNames.elementId);
         let relatedElements: HTMLElement[] = [element];
-        
+
         if (elementId) {
           // 使用 element-id 查找所有相同的列表项
           const allElementsWithId = Array.from(
             document.querySelectorAll(`[${AttributeNames.elementId}]`)
           ) as HTMLElement[];
-          
+
           relatedElements = allElementsWithId.filter(el => {
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
@@ -411,6 +451,7 @@ export const DesignModeProvider: React.FC<{
       config.iframeMode?.enabled,
       sendToParent,
       setSelectedElement,
+      findElementBySourceInfo
     ]
   );
 
@@ -436,19 +477,11 @@ export const DesignModeProvider: React.FC<{
         }
 
         // 根据 sourceInfo 查找元素
-        const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-
-        const element = document.querySelector(selector) as HTMLElement;
+        const element = findElementBySourceInfo(sourceInfo);
         if (!element) {
           console.error(
             '[DesignMode] Element not found for sourceInfo:',
-            sourceInfo,
-            'Selector:',
-            selector
-          );
-          // 尝试查找所有带有 file 属性的元素
-          const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            sourceInfo
           );
 
           sendToParent({
@@ -456,7 +489,7 @@ export const DesignModeProvider: React.FC<{
             payload: {
               code: 'ELEMENT_NOT_FOUND',
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
-              details: { sourceInfo, selector },
+              details: { sourceInfo },
             },
             timestamp: Date.now(),
           });
@@ -468,13 +501,13 @@ export const DesignModeProvider: React.FC<{
         // 查找所有具有相同 element-id 的元素（列表项同步）
         const elementId = element.getAttribute(AttributeNames.elementId);
         let relatedElements: HTMLElement[] = [element];
-        
+
         if (elementId) {
           // 使用 element-id 查找所有相同的列表项
           const allElementsWithId = Array.from(
             document.querySelectorAll(`[${AttributeNames.elementId}]`)
           ) as HTMLElement[];
-          
+
           relatedElements = allElementsWithId.filter(el => {
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
@@ -564,7 +597,51 @@ export const DesignModeProvider: React.FC<{
       config.iframeMode?.enabled,
       sendToParent,
       setSelectedElement,
+      findElementBySourceInfo
     ]
+  );
+
+  /**
+   * 更新源码文件
+   */
+  const updateSource = useCallback(
+    async (
+      element: HTMLElement,
+      newValue: string,
+      type: 'style' | 'content',
+      originalValue?: string
+    ) => {
+      const sourceInfo = extractSourceInfo(element);
+      if (!sourceInfo) {
+        throw new Error('Element does not have source mapping data');
+      }
+
+      try {
+        const response = await fetch('/__appdev_design_mode/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            filePath: sourceInfo.fileName,
+            line: sourceInfo.lineNumber,
+            column: sourceInfo.columnNumber,
+            newValue,
+            type,
+            originalValue,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update source');
+        }
+
+      } catch (error) {
+        console.error('[DesignMode] Error updating source:', error);
+        throw error;
+      }
+    },
+    []
   );
 
   /**
@@ -632,18 +709,7 @@ export const DesignModeProvider: React.FC<{
         });
       }
     },
-    []
-  );
-
-  /**
-   * 根据源码信息查找元素
-   */
-  const findElementBySourceInfo = useCallback(
-    (sourceInfo: SourceInfo): HTMLElement | null => {
-      const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
-      return document.querySelector(selector) as HTMLElement;
-    },
-    []
+    [findElementBySourceInfo, sendToParent, updateSource]
   );
 
   /**
@@ -651,56 +717,60 @@ export const DesignModeProvider: React.FC<{
    */
   const selectElement = useCallback(
     async (element: HTMLElement | null) => {
-      setSelectedElement(element);
+      if (element && (element.hasAttribute(AttributeNames.staticContent)
+        || element.hasAttribute(AttributeNames.staticClass))) {
+        setSelectedElement(element);
+      } else {
+        setSelectedElement(null);
+      }
 
       // 发送选择信息到父窗口（仅在iframe环境下）
       if (element && config.iframeMode?.enabled) {
-        const sourceInfoStr = element.getAttribute(AttributeNames.info);
-        if (sourceInfoStr) {
-          try {
-            const sourceInfo = JSON.parse(sourceInfoStr);
+        // 使用 resolveSourceInfo 获取正确的源位置
+        // 对于 UI 组件（如 Button），会返回其使用位置而非定义位置
+        const sourceInfo = resolveSourceInfo(element);
+        // console.log('[DesignModeContext] selectElement - resolveSourceInfo:', sourceInfo);
 
-            // 判断是否为静态文本：
-            // 1. 检查元素是否有 static-content 属性
-            // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
-            const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
-            const isActuallyPureText = isPureStaticText(element);
-            const isStaticText = hasStaticContentAttr && isActuallyPureText;
+        if (sourceInfo) {
+          // 判断是否为静态文本：
+          // 1. 检查元素是否有 static-content 属性
+          // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
+          const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
+          const isActuallyPureText = isPureStaticText(element);
+          const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
-            // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
-            let textContent = '';
-            if (isStaticText) {
-              // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
-              textContent = element.textContent || element.innerText || '';
-            } else {
-              // 对于非静态文本，也返回内容（可能为空）
-              textContent = element.innerText || element.textContent || '';
-            }
+          // 判断是否为静态 className：
+          // 检查元素是否有 static-class 属性（表示 className 是纯静态字符串，可编辑）
+          const isStaticClass = element.hasAttribute(AttributeNames.staticClass);
 
-            const elementInfo: ElementInfo = {
-              tagName: element.tagName.toLowerCase(),
-              className: element.className,
-              textContent: textContent,
-              sourceInfo: {
-                fileName: sourceInfo.fileName,
-                lineNumber: sourceInfo.lineNumber,
-                columnNumber: sourceInfo.columnNumber,
-              },
-              isStaticText: isStaticText || false, // 默认为 false
-            };
-            
-            sendToParent({
-              type: 'ELEMENT_SELECTED',
-              payload: { elementInfo },
-              timestamp: Date.now(),
-            });
-
-          } catch (e) {
-            console.warn('Failed to parse source info:', e);
+          // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
+          let textContent = '';
+          if (isStaticText) {
+            // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
+            textContent = element.textContent || element.innerText || '';
+          } else {
+            // 对于非静态文本，也返回内容（可能为空）
+            textContent = element.innerText || element.textContent || '';
           }
+
+          const elementInfo: ElementInfo = {
+            tagName: element.tagName.toLowerCase(),
+            className: element.className,
+            textContent: textContent,
+            sourceInfo,
+            isStaticText: isStaticText || false, // 默认为 false
+            isStaticClass: isStaticClass, // 标记 className 是否可编辑
+          };
+
+          sendToParent({
+            type: 'ELEMENT_SELECTED',
+            payload: { elementInfo },
+            timestamp: Date.now(),
+          });
+
         } else {
           console.warn(
-            `[DesignMode] Element selected but missing ${AttributeNames.info} attribute:`,
+            `[DesignMode] Element selected but could not resolve source info:`,
             element
           );
         }
@@ -726,49 +796,6 @@ export const DesignModeProvider: React.FC<{
       return next;
     });
   }, []);
-
-  /**
-   * 更新源码文件
-   */
-  const updateSource = useCallback(
-    async (
-      element: HTMLElement,
-      newValue: string,
-      type: 'style' | 'content',
-      originalValue?: string
-    ) => {
-      const sourceInfo = extractSourceInfo(element);
-      if (!sourceInfo) {
-        throw new Error('Element does not have source mapping data');
-      }
-
-      try {
-        const response = await fetch('/__appdev_design_mode/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filePath: sourceInfo.fileName,
-            line: sourceInfo.lineNumber,
-            column: sourceInfo.columnNumber,
-            newValue,
-            type,
-            originalValue,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update source');
-        }
-
-      } catch (error) {
-        console.error('[DesignMode] Error updating source:', error);
-        throw error;
-      }
-    },
-    []
-  );
 
   /**
    * 提取元素源码信息
