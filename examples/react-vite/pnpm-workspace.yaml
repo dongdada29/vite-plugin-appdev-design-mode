@@ -1,0 +1,2 @@
+overrides:
+  '@xagi/vite-plugin-design-mode': link:../..

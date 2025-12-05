@@ -1,6 +1,8 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
 import type { ElementInfo } from '@/types/messages';
+import type { TailwindPanelConfig } from '@/types/messages';
+import { twMerge } from 'tailwind-merge';
 
 
 // 确保React在所有情况下都可用
@@ -25,6 +27,7 @@ export default function IframeDemoPage() {
             originalValue?: string;
         }>
     >([]);
+    const [tailwindConfig, setTailwindConfig] = useState<TailwindPanelConfig | null>(null);
 
     const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
@@ -95,6 +98,11 @@ export default function IframeDemoPage() {
 
                 case 'STYLE_UPDATED':
                     console.log('[Parent] Style updated:', payload);
+                    break;
+
+                case 'TAILWIND_CONFIG':
+                    console.log('[Parent] Received Tailwind config:', payload);
+                    setTailwindConfig(payload.config);
                     break;
 
             }
@@ -227,7 +235,7 @@ export default function IframeDemoPage() {
         lastSelectedElementRef.current = selectedElement;
     }, [selectedElement]);
 
-    // Style Manager Logic
+    // Style Manager Logic - Using twMerge
     const toggleStyle = (newStyle: string, categoryRegex: RegExp) => {
         let currentClasses = editingClass.split(' ').filter(c => c.trim());
 
@@ -239,14 +247,53 @@ export default function IframeDemoPage() {
             currentClasses.push(newStyle);
         }
 
-        setEditingClass(currentClasses.join(' '));
+        // Use twMerge to handle conflicting classes
+        const mergedClasses = twMerge(currentClasses.join(' '));
+        setEditingClass(mergedClasses);
     };
 
     const hasStyle = (style: string) => {
         return editingClass.split(' ').includes(style);
     };
 
-    // UI Controls
+    // UI Controls - Dynamic Tailwind Config Rendering
+    const renderDynamicColorPicker = (prefix: string, label: string) => {
+        if (!tailwindConfig?.colors) {
+            return <div className="mb-4 text-sm text-gray-500">加载配置中...</div>;
+        }
+
+        return (
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {Object.entries(tailwindConfig.colors).map(([colorName, shades]) => (
+                        Object.entries(shades as Record<string, string>).map(([shade, hex]) => {
+                            const styleClass = `${prefix}-${colorName}-${shade}`;
+                            const isActive = hasStyle(styleClass);
+                            return (
+                                <button
+                                    key={`${colorName}-${shade}`}
+                                    onClick={() => toggleStyle(styleClass, new RegExp(`^${prefix}-[a-z]+(-\\d+)?$`))}
+                                    className={`w-8 h-8 rounded-full border-2 transition-all flex-shrink-0 ${isActive ? 'border-gray-900 scale-110 ring-2 ring-offset-1 ring-blue-500' : 'border-gray-300 hover:scale-105'
+                                        }`}
+                                    style={{ backgroundColor: hex }}
+                                    title={`${colorName}-${shade} (${hex})`}
+                                />
+                            );
+                        })
+                    ))}
+                    <button
+                        onClick={() => toggleStyle('', new RegExp(`^${prefix}-[a-z]+(-\\d+)?$`))}
+                        className="px-2 py-1 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-100 flex-shrink-0"
+                    >
+                        清除
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    // Legacy color picker for fallback
     const renderColorPicker = (prefix: string, colors: string[], label: string) => (
         <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
@@ -445,8 +492,17 @@ export default function IframeDemoPage() {
                                 <div>
                                     <h3 className="text-md font-bold text-gray-900 mb-4">样式设置</h3>
 
-                                    {renderColorPicker('bg', ['white', 'gray-100', 'red-100', 'blue-100', 'green-100', 'yellow-100', 'purple-100'], '背景颜色')}
-                                    {renderColorPicker('text', ['gray-900', 'gray-500', 'red-600', 'blue-600', 'green-600', 'purple-600', 'white'], '文字颜色')}
+                                    {tailwindConfig ? (
+                                        <>
+                                            {renderDynamicColorPicker('bg', '背景颜色')}
+                                            {renderDynamicColorPicker('text', '文字颜色')}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {renderColorPicker('bg', ['white', 'gray-100', 'red-100', 'blue-100', 'green-100', 'yellow-100', 'purple-100'], '背景颜色')}
+                                            {renderColorPicker('text', ['gray-900', 'gray-500', 'red-600', 'blue-600', 'green-600', 'purple-600', 'white'], '文字颜色')}
+                                        </>
+                                    )}
 
                                     {renderSelect('p', [
                                         { label: '无', value: '0' },
