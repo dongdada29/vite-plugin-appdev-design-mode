@@ -729,7 +729,7 @@ export const DesignModeProvider: React.FC<{
         // 使用 resolveSourceInfo 获取正确的源位置
         // 对于 UI 组件（如 Button），会返回其使用位置而非定义位置
         const sourceInfo = resolveSourceInfo(element);
-        console.log('[DesignModeContext] selectElement - resolveSourceInfo:', sourceInfo);
+        // console.log('[DesignModeContext] selectElement - resolveSourceInfo:', sourceInfo);
 
         if (sourceInfo) {
           // 判断是否为静态文本：

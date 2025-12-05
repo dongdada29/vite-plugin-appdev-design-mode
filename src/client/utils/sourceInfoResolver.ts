@@ -74,19 +74,19 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
 
     // 1. 如果当前元素来自 UI 组件（isUIComponent 标记），向上查找使用位置
     // 这样 Button.tsx 等 UI 组件会显示其在 Home.tsx 中的使用位置
-    console.log('[resolveSourceInfo] currentInfo:', window.location.href, currentInfo);
-    console.log('[resolveSourceInfo] isUIComponent:', window.location.href, currentInfo?.isUIComponent);
+    // console.log('[resolveSourceInfo] currentInfo:', window.location.href, currentInfo);
+    // console.log('[resolveSourceInfo] isUIComponent:', window.location.href, currentInfo?.isUIComponent);
 
     if (currentInfo?.isUIComponent) {
-        console.log('[resolveSourceInfo] Detected UI component, looking for usage location...');
+        // console.log('[resolveSourceInfo] Detected UI component, looking for usage location...');
         let parent = element.parentElement;
         let depth = 0;
         while (parent && depth < 20) {
             const parentInfo = extractSourceInfo(parent);
-            console.log('[resolveSourceInfo] Parent depth', depth, ':', parentInfo?.fileName, 'isUIComponent:', parentInfo?.isUIComponent);
+            // console.log('[resolveSourceInfo] Parent depth', depth, ':', parentInfo?.fileName, 'isUIComponent:', parentInfo?.isUIComponent);
             // 找到第一个非 UI 组件的父元素
             if (parentInfo?.fileName && !parentInfo.isUIComponent) {
-                console.log('[resolveSourceInfo] Found usage location:', parentInfo.fileName, parentInfo.lineNumber);
+                // console.log('[resolveSourceInfo] Found usage location:', parentInfo.fileName, parentInfo.lineNumber);
                 return {
                     fileName: parentInfo.fileName,
                     lineNumber: parentInfo.lineNumber,
@@ -99,7 +99,7 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
             parent = parent.parentElement;
             depth++;
         }
-        console.log('[resolveSourceInfo] No non-UI parent found, falling through...');
+        // console.log('[resolveSourceInfo] No non-UI parent found, falling through...');
     }
 
     // 2. 优先检查 children-source 属性
