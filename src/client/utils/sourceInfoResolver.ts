@@ -46,13 +46,16 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
             const columnNumber = parseInt(parts[parts.length - 1], 10);
 
             if (!isNaN(lineNumber) && !isNaN(columnNumber)) {
+                // 尝试获取当前元素的组件信息
+                const currentInfo = extractSourceInfo(element);
+
                 return {
                     fileName,
                     lineNumber,
                     columnNumber,
                     elementType: element.tagName?.toLowerCase() || 'unknown',
-                    componentName: element.getAttribute(AttributeNames.component) || undefined,
-                    functionName: element.getAttribute(AttributeNames.function) || undefined
+                    componentName: currentInfo?.componentName,
+                    functionName: currentInfo?.functionName
                 };
             }
         }
@@ -64,7 +67,9 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
     }
 
     // 有static-content属性，说明这是组件内部的元素，需要找到使用位置
-    const currentFile = element.getAttribute(AttributeNames.file);
+    const currentInfo = extractSourceInfo(element);
+    const currentFile = currentInfo?.fileName;
+
     let currentElement: HTMLElement | null = element;
     let depth = 0;
 
@@ -75,7 +80,8 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
             break;
         }
 
-        const parentFile = parent.getAttribute(AttributeNames.file);
+        const parentInfo = extractSourceInfo(parent);
+        const parentFile = parentInfo?.fileName;
         const parentHasStaticContent = parent.hasAttribute(AttributeNames.staticContent);
 
         // 检查是否找到了使用位置：
@@ -85,7 +91,7 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
         //    b) 父元素的文件与当前文件不同（跨越了组件边界）
         if (parentFile && (!parentHasStaticContent || parentFile !== currentFile)) {
             // 找到了使用位置，返回父元素的源信息
-            return extractSourceInfo(parent);
+            return parentInfo;
         }
 
         currentElement = parent;
@@ -103,7 +109,8 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
  */
 export function isInComponentDefinition(element: HTMLElement): boolean {
     const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
-    const sourceFile = element.getAttribute(AttributeNames.file);
+    const sourceInfo = extractSourceInfo(element);
+    const sourceFile = sourceInfo?.fileName;
 
     if (!hasStaticContent || !sourceFile) {
         return false;
@@ -115,7 +122,8 @@ export function isInComponentDefinition(element: HTMLElement): boolean {
         return false;
     }
 
-    const parentFile = parent.getAttribute(AttributeNames.file);
+    const parentInfo = extractSourceInfo(parent);
+    const parentFile = parentInfo?.fileName;
     const parentHasStaticContent = parent.hasAttribute(AttributeNames.staticContent);
 
     // 如果父元素也有static-content且文件相同，说明在组件定义内部

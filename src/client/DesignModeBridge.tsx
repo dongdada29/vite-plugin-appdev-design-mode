@@ -11,6 +11,7 @@ import {
 import { AttributeNames } from './utils/attributeNames';
 import { isPureStaticText } from './utils/elementUtils';
 import { resolveSourceInfo } from './utils/sourceInfoResolver';
+import { extractSourceInfo } from './utils/sourceInfo';
 
 export const DesignModeBridge: React.FC = () => {
   const { selectedElement, modifyElementClass, updateElementContent } =
@@ -124,17 +125,12 @@ export const DesignModeBridge: React.FC = () => {
 
       if (selectedElement && payload?.sourceInfo && payload?.newClass) {
         // 验证源信息是否匹配
-        const elementSourceInfo = {
-          fileName: selectedElement.getAttribute(AttributeNames.file) || '',
-          lineNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.line) || '0',
-            10
-          ),
-          columnNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.column) || '0',
-            10
-          ),
-        };
+        const elementSourceInfo = extractSourceInfo(selectedElement);
+
+        if (!elementSourceInfo) {
+          console.warn('[DesignModeBridge] Selected element missing source info');
+          return;
+        }
 
         const sourceMatches =
           elementSourceInfo.fileName === payload.sourceInfo.fileName &&
@@ -160,17 +156,12 @@ export const DesignModeBridge: React.FC = () => {
         payload?.newContent !== undefined
       ) {
         // 验证源信息是否匹配
-        const elementSourceInfo = {
-          fileName: selectedElement.getAttribute(AttributeNames.file) || '',
-          lineNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.line) || '0',
-            10
-          ),
-          columnNumber: parseInt(
-            selectedElement.getAttribute(AttributeNames.column) || '0',
-            10
-          ),
-        };
+        const elementSourceInfo = extractSourceInfo(selectedElement);
+
+        if (!elementSourceInfo) {
+          console.warn('[DesignModeBridge] Selected element missing source info');
+          return;
+        }
 
         const sourceMatches =
           elementSourceInfo.fileName === payload.sourceInfo.fileName &&
