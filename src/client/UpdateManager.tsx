@@ -257,7 +257,7 @@ export class UpdateManager {
 
     // 添加悬停效果
     element.addEventListener('mouseenter', () => {
-      if (this.config.enableDirectEdit) {
+      if (this.config.enableDirectEdit && this.isDesignMode) {
         element.style.outline = '1px dashed #007acc';
       }
     });
