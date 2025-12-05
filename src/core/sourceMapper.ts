@@ -13,7 +13,9 @@ export interface SourceMappingInfo {
   elementId: string;
   attributePrefix: string;
   importPath?: string; // 新增：组件导入路径
+  isUIComponent?: boolean; // 新增：是否是 UI 组件（components/ui 目录下的组件）
 }
+
 
 export interface JSXElementWithLoc extends t.JSXOpeningElement {
   loc: t.SourceLocation;
@@ -22,6 +24,15 @@ export interface JSXElementWithLoc extends t.JSXOpeningElement {
 // PluginItem type from Babel
 type PluginItem = any;
 type NodePath = any;
+
+/**
+ * 检查文件路径是否是 UI 组件（components/ui 目录下的组件）
+ * 这些组件在运行时应该显示其使用位置而非定义位置
+ */
+function isUIComponentFile(filePath: string): boolean {
+  // 匹配 /components/ui/ 或 \components\ui\ 路径
+  return /[/\\]components[/\\]ui[/\\]/.test(filePath);
+}
 
 /**
  * 创建源码映射Babel插件
@@ -80,6 +91,9 @@ export function createSourceMappingPlugin(
         //   console.log(`[DesignMode] Injecting importPath for ${elementType}: ${importPath}`);
         // }
 
+        // 检查当前文件是否是 UI 组件
+        const isUIComponent = isUIComponentFile(fileName);
+
         // 构建源码位置信息
         const sourceInfo: SourceMappingInfo = {
           fileName: fileName,
@@ -90,8 +104,10 @@ export function createSourceMappingPlugin(
           functionName: componentInfo.functionName,
           elementId: generateElementId(node, fileName, location),
           attributePrefix,
-          importPath // 注入导入路径
+          importPath, // 注入导入路径
+          isUIComponent // 标记是否是 UI 组件
         };
+
 
         // 添加源码信息属性（使用配置的前缀）
         addSourceInfoAttribute(node, sourceInfo, options);
@@ -259,7 +275,8 @@ function addSourceInfoAttribute(node: t.JSXOpeningElement, sourceInfo: SourceMap
       componentName: sourceInfo.componentName,
       functionName: sourceInfo.functionName,
       elementId: sourceInfo.elementId,
-      importPath: sourceInfo.importPath // 包含导入路径
+      importPath: sourceInfo.importPath, // 包含导入路径
+      isUIComponent: sourceInfo.isUIComponent // 标记是否是 UI 组件
     }))
   );
 

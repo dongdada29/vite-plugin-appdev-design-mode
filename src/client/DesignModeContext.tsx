@@ -25,6 +25,7 @@ import { bridge, messageValidator } from './bridge';
 import { AttributeNames } from './utils/attributeNames';
 import { isPureStaticText } from './utils/elementUtils';
 import { extractSourceInfo } from './utils/sourceInfo';
+import { resolveSourceInfo } from './utils/sourceInfoResolver';
 
 export interface Modification {
   id: string;
@@ -715,48 +716,46 @@ export const DesignModeProvider: React.FC<{
 
       // 发送选择信息到父窗口（仅在iframe环境下）
       if (element && config.iframeMode?.enabled) {
-        const sourceInfoStr = element.getAttribute(AttributeNames.info);
-        if (sourceInfoStr) {
-          try {
-            const sourceInfo = JSON.parse(sourceInfoStr);
+        // 使用 resolveSourceInfo 获取正确的源位置
+        // 对于 UI 组件（如 Button），会返回其使用位置而非定义位置
+        const sourceInfo = resolveSourceInfo(element);
+        console.log('[DesignModeContext] selectElement - resolveSourceInfo:', sourceInfo);
 
-            // 判断是否为静态文本：
-            // 1. 检查元素是否有 static-content 属性
-            // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
-            const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
-            const isActuallyPureText = isPureStaticText(element);
-            const isStaticText = hasStaticContentAttr && isActuallyPureText;
+        if (sourceInfo) {
+          // 判断是否为静态文本：
+          // 1. 检查元素是否有 static-content 属性
+          // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
+          const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
+          const isActuallyPureText = isPureStaticText(element);
+          const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
-            // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
-            let textContent = '';
-            if (isStaticText) {
-              // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
-              textContent = element.textContent || element.innerText || '';
-            } else {
-              // 对于非静态文本，也返回内容（可能为空）
-              textContent = element.innerText || element.textContent || '';
-            }
-
-            const elementInfo: ElementInfo = {
-              tagName: element.tagName.toLowerCase(),
-              className: element.className,
-              textContent: textContent,
-              sourceInfo,
-              isStaticText: isStaticText || false, // 默认为 false
-            };
-
-            sendToParent({
-              type: 'ELEMENT_SELECTED',
-              payload: { elementInfo },
-              timestamp: Date.now(),
-            });
-
-          } catch (e) {
-            console.warn('Failed to parse source info:', e);
+          // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
+          let textContent = '';
+          if (isStaticText) {
+            // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
+            textContent = element.textContent || element.innerText || '';
+          } else {
+            // 对于非静态文本，也返回内容（可能为空）
+            textContent = element.innerText || element.textContent || '';
           }
+
+          const elementInfo: ElementInfo = {
+            tagName: element.tagName.toLowerCase(),
+            className: element.className,
+            textContent: textContent,
+            sourceInfo,
+            isStaticText: isStaticText || false, // 默认为 false
+          };
+
+          sendToParent({
+            type: 'ELEMENT_SELECTED',
+            payload: { elementInfo },
+            timestamp: Date.now(),
+          });
+
         } else {
           console.warn(
-            `[DesignMode] Element selected but missing ${AttributeNames.info} attribute:`,
+            `[DesignMode] Element selected but could not resolve source info:`,
             element
           );
         }

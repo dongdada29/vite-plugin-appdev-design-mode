@@ -69,6 +69,7 @@ export const DesignModeBridge: React.FC = () => {
         // 使用 resolveSourceInfo 来获取正确的源位置
         // 对于pass-through组件，会向上查找使用位置
         const sourceInfo = resolveSourceInfo(selectedElement);
+        console.log('[DesignModeBridge] resolveSourceInfo', window.location.href, sourceInfo);
 
         // 确保我们有有效的元素数据
         // 判断是否为静态文本：

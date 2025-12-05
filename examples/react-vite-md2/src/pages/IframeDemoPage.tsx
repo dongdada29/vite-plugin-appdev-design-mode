@@ -553,7 +553,7 @@ export default function IframeDemoPage() {
             <div className='h-full bg-white rounded-lg shadow-xl overflow-hidden'>
               <iframe
                 ref={iframeRef}
-                src={'http://localhost:5174/'}
+                src={'http://localhost:3000/'}
                 className='w-full h-full'
                 title='设计模式 Iframe 演示'
               />

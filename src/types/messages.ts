@@ -9,6 +9,7 @@ export interface SourceInfo {
   functionName?: string;
   elementId?: string;
   importPath?: string;
+  isUIComponent?: boolean; // 标记是否是 UI 组件（components/ui 目录下的组件）
 }
 
 export interface ElementInfo {

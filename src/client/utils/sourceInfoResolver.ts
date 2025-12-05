@@ -72,7 +72,37 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
     const currentInfo = extractSourceInfo(element);
     const currentFile = currentInfo?.fileName;
 
-    // 优先检查 children-source 属性
+    // 1. 如果当前元素来自 UI 组件（isUIComponent 标记），向上查找使用位置
+    // 这样 Button.tsx 等 UI 组件会显示其在 Home.tsx 中的使用位置
+    console.log('[resolveSourceInfo] currentInfo:', window.location.href, currentInfo);
+    console.log('[resolveSourceInfo] isUIComponent:', window.location.href, currentInfo?.isUIComponent);
+
+    if (currentInfo?.isUIComponent) {
+        console.log('[resolveSourceInfo] Detected UI component, looking for usage location...');
+        let parent = element.parentElement;
+        let depth = 0;
+        while (parent && depth < 20) {
+            const parentInfo = extractSourceInfo(parent);
+            console.log('[resolveSourceInfo] Parent depth', depth, ':', parentInfo?.fileName, 'isUIComponent:', parentInfo?.isUIComponent);
+            // 找到第一个非 UI 组件的父元素
+            if (parentInfo?.fileName && !parentInfo.isUIComponent) {
+                console.log('[resolveSourceInfo] Found usage location:', parentInfo.fileName, parentInfo.lineNumber);
+                return {
+                    fileName: parentInfo.fileName,
+                    lineNumber: parentInfo.lineNumber,
+                    columnNumber: parentInfo.columnNumber,
+                    elementType: element.tagName?.toLowerCase() || 'unknown',
+                    componentName: currentInfo?.componentName,
+                    functionName: currentInfo?.functionName
+                };
+            }
+            parent = parent.parentElement;
+            depth++;
+        }
+        console.log('[resolveSourceInfo] No non-UI parent found, falling through...');
+    }
+
+    // 2. 优先检查 children-source 属性
     // 这个属性记录了静态文本children的真实来源位置
     // 尝试多种可能的前缀，以防配置不一致
     const candidates = [
@@ -111,7 +141,7 @@ export function resolveSourceInfo(element: HTMLElement): SourceInfo | null {
         }
     }
 
-    // 检查子元素是否来自不同文件（说明这是一个组件包装器）
+    // 3. 检查子元素是否来自不同文件（说明这是一个组件包装器）
     // 例如：Button 组件的 <button> 元素包含来自 Home.tsx 的 <a> 子元素
     if (currentFile) {
         const childWithDifferentSource = findChildFromDifferentFile(element, currentFile);
