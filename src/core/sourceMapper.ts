@@ -71,6 +71,34 @@ export function createSourceMappingPlugin(
         if (isStaticContent(path)) {
           addStaticContentAttribute(node, path, options);
         }
+      },
+
+      JSXElement(path: NodePath) {
+        const { node } = path;
+        const { openingElement, children } = node;
+
+        // 只处理有静态文本children的元素
+        if (!children || children.length === 0) return;
+
+        // 检查children是否包含JSXText（静态文本）
+        const hasStaticText = children.some((child: any) => t.isJSXText(child) && child.value.trim() !== '');
+
+        if (hasStaticText) {
+          // 获取第一个非空文本节点的位置
+          const textChild = children.find((child: any) => t.isJSXText(child) && child.value.trim() !== '');
+          if (textChild && textChild.loc) {
+            // 添加 children-source 属性，记录文本的来源位置
+            const childrenSourceValue = `${fileName}:${textChild.loc.start.line}:${textChild.loc.start.column}`;
+            const attributeName = `${attributePrefix}-children-source`;
+
+            openingElement.attributes.push(
+              t.jsxAttribute(
+                t.jsxIdentifier(attributeName),
+                t.stringLiteral(childrenSourceValue)
+              )
+            );
+          }
+        }
       }
     }
   };
@@ -195,7 +223,7 @@ function addSourceInfoAttribute(node: t.JSXOpeningElement, sourceInfo: SourceMap
     }))
   );
 
-  node.attributes.push(attr);
+  node.attributes.unshift(attr);
 }
 
 /**
@@ -213,7 +241,7 @@ function addPositionAttribute(node: t.JSXOpeningElement, location: t.SourceLocat
     t.stringLiteral(`${location.start.line}:${location.start.column}`)
   );
 
-  node.attributes.push(attr);
+  node.attributes.unshift(attr);
 }
 
 /**
@@ -231,7 +259,7 @@ function addElementIdAttribute(node: t.JSXOpeningElement, sourceInfo: SourceMapp
     t.stringLiteral(sourceInfo.elementId)
   );
 
-  node.attributes.push(attr);
+  node.attributes.unshift(attr);
 }
 
 /**
@@ -243,12 +271,12 @@ function addIndividualAttributes(node: t.JSXOpeningElement, sourceInfo: SourceMa
   // Helper to add attribute if it doesn't exist
   const addAttr = (name: string, value: string | number | undefined) => {
     if (value === undefined) return;
-    
+
     node.attributes = node.attributes.filter(a =>
       !(t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === name)
     );
 
-    node.attributes.push(t.jSXAttribute(
+    node.attributes.unshift(t.jSXAttribute(
       t.jSXIdentifier(name),
       t.stringLiteral(String(value))
     ));
@@ -303,20 +331,20 @@ function isStaticContent(path: NodePath): boolean {
 function addStaticContentAttribute(node: t.JSXOpeningElement, path: NodePath, options: Required<DesignModeOptions>) {
   const { attributePrefix } = options;
   const attributeName = `${attributePrefix}-static-content`;
-  
+
   // 双重验证：再次检查元素是否真的只包含纯文本节点
   // 即使调用前已经检查过，这里也再次验证以确保安全
   if (!isStaticContent(path)) {
     return; // 如果不是纯静态文本，不添加属性
   }
-  
+
   // Check if attribute already exists
   const hasAttr = node.attributes.some(a =>
     t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === attributeName
   );
 
   if (!hasAttr) {
-    node.attributes.push(t.jSXAttribute(
+    node.attributes.unshift(t.jSXAttribute(
       t.jSXIdentifier(attributeName),
       t.stringLiteral('true')
     ));

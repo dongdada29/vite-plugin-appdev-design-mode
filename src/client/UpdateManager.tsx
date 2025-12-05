@@ -113,13 +113,13 @@ export class UpdateManager {
     if (!this.isDesignMode) return;
 
     const target = event.target as HTMLElement;
-    
+
     // 检查元素是否有源码映射（可编辑的前提条件）
     if (!hasSourceMapping(target)) return;
 
     // 排除设计模式 UI 元素
     if (target.closest('#__vite_plugin_design_mode__')) return;
-    
+
     // 排除右键菜单
     if (target.closest(`[${AttributeNames.contextMenu}="true"]`)) return;
 
@@ -129,6 +129,22 @@ export class UpdateManager {
     if (staticContentAttr !== 'true') {
       // 如果 static-content 属性不存在或值不为 'true'，不允许编辑
       return;
+    }
+
+    // 文件级别保护：阻止编辑组件库文件
+    const sourceInfo = extractSourceInfo(target);
+    if (sourceInfo) {
+      const fileName = sourceInfo.fileName;
+      const isComponentFile = fileName.includes('/components/') ||
+        fileName.includes('/ui/') ||
+        fileName.endsWith('card.tsx') ||
+        fileName.endsWith('button.tsx');
+
+      if (isComponentFile) {
+        console.warn('[UpdateManager] Cannot edit component library files. Source:', fileName);
+        console.warn('[UpdateManager] React does not preserve usage site information in the DOM.');
+        return;
+      }
     }
 
     // 防止默认行为
@@ -414,13 +430,13 @@ export class UpdateManager {
         alertMessage += `标签: <${elementInfo.tagName}>\n`;
         alertMessage += `类名: ${elementInfo.className}\n`;
         alertMessage += `内容: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`;
-        
+
         // 拷贝成功，发送成功消息
         sendCopyMessage(true);
       }).catch(err => {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error('[UpdateManager] Failed to copy to clipboard:', err);
-        
+
         // 拷贝失败，发送失败消息
         sendCopyMessage(false, errorMessage);
       });
@@ -442,7 +458,7 @@ export class UpdateManager {
     // 构建 ADD_TO_CHAT 消息
     // 将 null 转换为 undefined，因为 AddToChatMessage 期望 undefined 而不是 null
     const contextSourceInfo = sourceInfo ?? undefined;
-    
+
     // 如果 sourceInfo 存在，构建完整的 elementInfo（包含必需的 sourceInfo 和 isStaticText）
     // 如果 sourceInfo 不存在，则不提供 elementInfo
     const elementInfo = sourceInfo ? {

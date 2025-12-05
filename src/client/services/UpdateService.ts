@@ -89,7 +89,7 @@ export class UpdateService {
           filePath: update.sourceInfo.fileName,
           line: update.sourceInfo.lineNumber,
           column: update.sourceInfo.columnNumber,
-          type: update.operation === 'style_update' ? 'style' : 'content',
+          type: (update.operation === 'style_update' || update.operation === 'class_update') ? 'style' : 'content',
           newValue: update.newValue,
           originalValue: update.oldValue,
         })),
@@ -176,7 +176,7 @@ export class UpdateService {
         column: update.sourceInfo.columnNumber,
         newValue: update.newValue,
         originalValue: update.oldValue,
-        type: update.operation === 'style_update' ? 'style' : 'content',
+        type: (update.operation === 'style_update' || update.operation === 'class_update') ? 'style' : 'content',
       }),
     });
 

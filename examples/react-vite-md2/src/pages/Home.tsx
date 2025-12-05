@@ -83,7 +83,7 @@ export default function Home() {
           <div className="mt-16 text-center">
             <Card className="max-w-3xl mx-auto bg-accent border-primary">
               <CardHeader>
-                <CardTitle className="text-2xl text-primary">功能特色</CardTitle>
+                <CardTitle className="font-semibold text-2xl text-blue-600">功能特色</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">

@@ -4,6 +4,10 @@ export interface SourceInfo {
   fileName: string;
   lineNumber: number;
   columnNumber: number;
+  elementType?: string;
+  componentName?: string;
+  functionName?: string;
+  elementId?: string;
 }
 
 export interface ElementInfo {
@@ -244,7 +248,7 @@ export type IframeToParentMessage =
   | AddToChatMessage
   | CopyElementMessage
   | ContentUpdatedCallbackMessage;
-  
+
 export type ParentToIframeMessage =
   | ToggleDesignModeMessage
   | UpdateStyleMessage

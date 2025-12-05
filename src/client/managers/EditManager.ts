@@ -3,6 +3,7 @@ import { SourceInfo } from '../../types/messages';
 import { extractSourceInfo, hasSourceMapping } from '../utils/sourceInfo';
 import { isPureStaticText } from '../utils/elementUtils';
 import { AttributeNames } from '../utils/attributeNames';
+import { resolveSourceInfo } from '../utils/sourceInfoResolver';
 
 export class EditManager {
   constructor(
@@ -25,8 +26,34 @@ export class EditManager {
    * Edit text content using contentEditable
    */
   public async editTextContent(element: HTMLElement) {
-    const sourceInfo = extractSourceInfo(element);
+    // 使用 resolveSourceInfo 来获取正确的源位置
+    // 对于pass-through组件（有static-content属性），会向上查找使用位置
+    const sourceInfo = resolveSourceInfo(element);
     if (!sourceInfo) return;
+
+    // 检查元素是否有 static-content 属性
+    // 只有在使用位置（有 static-content）的元素才能编辑
+    // 组件定义中的元素不应该被编辑
+    const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
+    if (!hasStaticContent) {
+      console.warn('[EditManager] Cannot edit: element does not have static-content attribute. This might be a component definition, not a usage site.');
+      return;
+    }
+
+    // 文件级别保护：阻止编辑组件库文件
+    // 只允许编辑页面/应用文件 (pages/, App.tsx等)
+    const fileName = sourceInfo.fileName;
+    const isComponentFile = fileName.includes('/components/') ||
+      fileName.includes('/ui/') ||
+      fileName.endsWith('card.tsx') ||
+      fileName.endsWith('button.tsx');
+
+    if (isComponentFile) {
+      console.warn('[EditManager] Cannot edit component library files. Source:', fileName);
+      console.warn('[EditManager] This is a pass-through component. React does not preserve usage site information in the DOM.');
+      console.warn('[EditManager] To edit this content, you need to manually edit the source file at:', fileName);
+      return;
+    }
 
     // 保存原始文本和状态
     const originalText = element.innerText;
@@ -303,7 +330,8 @@ export class EditManager {
     sourceInfo?: SourceInfo,
     oldValue?: string
   ): void {
-    const finalSourceInfo = sourceInfo || extractSourceInfo(element);
+    // 使用 resolveSourceInfo 来获取正确的源位置（如果未提供）
+    const finalSourceInfo = sourceInfo || resolveSourceInfo(element);
     if (!finalSourceInfo) {
       console.warn('[EditManager] Cannot notify: no source info available');
       return;
@@ -344,7 +372,8 @@ export class EditManager {
 
     this.lastRealtimeNotify = now;
 
-    const finalSourceInfo = sourceInfo || extractSourceInfo(element);
+    // 使用 resolveSourceInfo 来获取正确的源位置（如果未提供）
+    const finalSourceInfo = sourceInfo || resolveSourceInfo(element);
     if (!finalSourceInfo) {
       return;
     }
@@ -366,30 +395,49 @@ export class EditManager {
 
   /**
    * Find all elements with the same source info
-   * 使用 element-id 来查找相同的元素（特别是列表项）
+   * 更严格的匹配规则：
+   * 1. 相同的 element-id
+   * 2. 相同的 static-content 属性状态（都有或都没有）
+   * 3. 来自相同的文件位置
+   * 这样可以确保只更新在源码中相同嵌套位置的元素，避免误更新组件定义
+   * 
    * @param element - 要查找相同元素的参考元素
    * @param sourceInfo - 源代码信息（可选，已废弃，保留用于兼容性）
    */
   private findAllElementsWithSameSource(element: HTMLElement, sourceInfo?: SourceInfo): HTMLElement[] {
-    // 使用 element-id 来查找相同的元素
-    // 所有元素都应该有 element-id 属性
+    // 获取参考元素的关键属性
     const elementId = element.getAttribute(AttributeNames.elementId);
-    
+    const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
+    const refFileName = element.getAttribute(AttributeNames.file);
+
     if (!elementId) {
       console.warn('[EditManager] Element missing element-id attribute:', element);
       return [element]; // 如果没有 element-id，只返回当前元素
     }
 
-    // 使用 element-id 查找所有具有相同 element-id 的元素
-    // 注意：由于 element-id 可能包含特殊字符（如冒号），我们需要使用更安全的方式
-    // 遍历所有具有 element-id 属性的元素，然后比较值
+    // 获取所有具有相同 element-id 的元素
     const allElementsWithId = Array.from(
       document.querySelectorAll(`[${AttributeNames.elementId}]`)
     ) as HTMLElement[];
-    
+
+    // 严格匹配：element-id + static-content 状态 + 文件位置
     return allElementsWithId.filter(el => {
       const elId = el.getAttribute(AttributeNames.elementId);
-      return elId === elementId;
+      const elHasStaticContent = el.hasAttribute(AttributeNames.staticContent);
+      const elFileName = el.getAttribute(AttributeNames.file);
+
+      // 1. element-id 必须相同
+      if (elId !== elementId) return false;
+
+      // 2. static-content 属性状态必须相同
+      // 这确保了只匹配使用位置的元素，不会匹配组件定义
+      if (elHasStaticContent !== hasStaticContent) return false;
+
+      // 3. 文件位置必须相同
+      // 这进一步确保只匹配同一个文件中的元素
+      if (elFileName !== refFileName) return false;
+
+      return true;
     });
   }
 }

@@ -10,6 +10,7 @@ import {
 } from '../types/messages';
 import { AttributeNames } from './utils/attributeNames';
 import { isPureStaticText } from './utils/elementUtils';
+import { resolveSourceInfo } from './utils/sourceInfoResolver';
 
 export const DesignModeBridge: React.FC = () => {
   const { selectedElement, modifyElementClass, updateElementContent } =
@@ -64,10 +65,9 @@ export const DesignModeBridge: React.FC = () => {
     // 延迟执行，确保Bridge有时间初始化
     const timer = setTimeout(() => {
       if (selectedElement) {
-        // 检查元素的 source 属性
-        const sourceFile = selectedElement.getAttribute(AttributeNames.file);
-        const sourceLine = selectedElement.getAttribute(AttributeNames.line);
-        const sourceColumn = selectedElement.getAttribute(AttributeNames.column);
+        // 使用 resolveSourceInfo 来获取正确的源位置
+        // 对于pass-through组件，会向上查找使用位置
+        const sourceInfo = resolveSourceInfo(selectedElement);
 
         // 确保我们有有效的元素数据
         // 判断是否为静态文本：
@@ -76,7 +76,7 @@ export const DesignModeBridge: React.FC = () => {
         const hasStaticContentAttr = selectedElement.hasAttribute(AttributeNames.staticContent);
         const isActuallyPureText = isPureStaticText(selectedElement);
         const isStaticText = hasStaticContentAttr && isActuallyPureText;
-        
+
         const elementData = {
           tagName: selectedElement.tagName.toLowerCase(),
           className: selectedElement.className || '',
@@ -85,10 +85,10 @@ export const DesignModeBridge: React.FC = () => {
             selectedElement.innerText ||
             ''
           ).substring(0, 100),
-          sourceInfo: {
-            fileName: sourceFile || '',
-            lineNumber: parseInt(sourceLine || '0', 10),
-            columnNumber: parseInt(sourceColumn || '0', 10),
+          sourceInfo: sourceInfo || {
+            fileName: '',
+            lineNumber: 0,
+            columnNumber: 0,
           },
           isStaticText: isStaticText || false, // 默认为 false
         };
@@ -123,6 +123,18 @@ export const DesignModeBridge: React.FC = () => {
       const payload = message.payload;
 
       if (selectedElement && payload?.sourceInfo && payload?.newClass) {
+        // 文件级别保护：阻止通过消息更新组件库文件  
+        const fileName = payload.sourceInfo.fileName;
+        const isComponentFile = fileName.includes('/components/') ||
+          fileName.includes('/ui/') ||
+          fileName.endsWith('card.tsx') ||
+          fileName.endsWith('button.tsx');
+
+        if (isComponentFile) {
+          console.warn('[DesignModeBridge] Cannot update component library files via message. Source:', fileName);
+          return;
+        }
+
         // 验证源信息是否匹配
         const elementSourceInfo = {
           fileName: selectedElement.getAttribute(AttributeNames.file) || '',
@@ -159,6 +171,19 @@ export const DesignModeBridge: React.FC = () => {
         payload?.sourceInfo &&
         payload?.newContent !== undefined
       ) {
+        // 文件级别保护：阻止通过消息更新组件库文件
+        const fileName = payload.sourceInfo.fileName;
+        const isComponentFile = fileName.includes('/components/') ||
+          fileName.includes('/ui/') ||
+          fileName.endsWith('card.tsx') ||
+          fileName.endsWith('button.tsx');
+
+        if (isComponentFile) {
+          console.warn('[DesignModeBridge] Cannot update component library files via message. Source:', fileName);
+          console.warn('[DesignModeBridge] Please edit the source file directly at:', fileName);
+          return;
+        }
+
         // 验证源信息是否匹配
         const elementSourceInfo = {
           fileName: selectedElement.getAttribute(AttributeNames.file) || '',

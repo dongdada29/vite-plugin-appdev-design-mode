@@ -5,7 +5,7 @@
  */
 
 // 默认前缀（如果配置未注入，使用此默认值）
-const DEFAULT_PREFIX = 'data-source';
+const DEFAULT_PREFIX = 'data-xagi';
 
 // 从全局配置或 meta 标签获取属性前缀
 function getAttributePrefix(): string {
@@ -90,6 +90,13 @@ export const AttributeNames = {
   },
   get staticContent() {
     return getAttributeName('static-content');
+  },
+  /**
+   * Get the children source attribute name (for tracking where static children come from)
+   * Example: data-xagi-children-source
+   */
+  get childrenSource() {
+    return getAttributeName('children-source');
   },
   get contextMenu() {
     return getAttributeName('context-menu');
