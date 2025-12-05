@@ -131,22 +131,6 @@ export class UpdateManager {
       return;
     }
 
-    // 文件级别保护：阻止编辑组件库文件
-    const sourceInfo = extractSourceInfo(target);
-    if (sourceInfo) {
-      const fileName = sourceInfo.fileName;
-      const isComponentFile = fileName.includes('/components/') ||
-        fileName.includes('/ui/') ||
-        fileName.endsWith('card.tsx') ||
-        fileName.endsWith('button.tsx');
-
-      if (isComponentFile) {
-        console.warn('[UpdateManager] Cannot edit component library files. Source:', fileName);
-        console.warn('[UpdateManager] React does not preserve usage site information in the DOM.');
-        return;
-      }
-    }
-
     // 防止默认行为
     event.preventDefault();
     event.stopPropagation();

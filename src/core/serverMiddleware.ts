@@ -880,23 +880,6 @@ async function validateUpdateRequest(update: any, rootDir: string): Promise<{ va
 // 处理单个更新
 async function processSingleUpdate(update: any, rootDir: string, batchId: string, enableBackup: boolean = false): Promise<any> {
   try {
-    // 文件级别保护：阻止更新组件库文件
-    const fileName = update.filePath || '';
-    const isComponentFile = fileName.includes('/components/') ||
-      fileName.includes('/ui/') ||
-      fileName.endsWith('card.tsx') ||
-      fileName.endsWith('button.tsx');
-
-    if (isComponentFile) {
-      console.warn('[ServerMiddleware] Blocked update to component library file:', fileName);
-      return {
-        success: false,
-        error: `Cannot update component library files (${fileName}). This is a pass-through component where React does not preserve usage site information.`,
-        update,
-        blocked: true
-      };
-    }
-
     const validation = await validateUpdateRequest(update, rootDir);
     if (!validation.valid) {
       return {

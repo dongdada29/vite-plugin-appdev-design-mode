@@ -123,18 +123,6 @@ export const DesignModeBridge: React.FC = () => {
       const payload = message.payload;
 
       if (selectedElement && payload?.sourceInfo && payload?.newClass) {
-        // 文件级别保护：阻止通过消息更新组件库文件  
-        const fileName = payload.sourceInfo.fileName;
-        const isComponentFile = fileName.includes('/components/') ||
-          fileName.includes('/ui/') ||
-          fileName.endsWith('card.tsx') ||
-          fileName.endsWith('button.tsx');
-
-        if (isComponentFile) {
-          console.warn('[DesignModeBridge] Cannot update component library files via message. Source:', fileName);
-          return;
-        }
-
         // 验证源信息是否匹配
         const elementSourceInfo = {
           fileName: selectedElement.getAttribute(AttributeNames.file) || '',
@@ -171,19 +159,6 @@ export const DesignModeBridge: React.FC = () => {
         payload?.sourceInfo &&
         payload?.newContent !== undefined
       ) {
-        // 文件级别保护：阻止通过消息更新组件库文件
-        const fileName = payload.sourceInfo.fileName;
-        const isComponentFile = fileName.includes('/components/') ||
-          fileName.includes('/ui/') ||
-          fileName.endsWith('card.tsx') ||
-          fileName.endsWith('button.tsx');
-
-        if (isComponentFile) {
-          console.warn('[DesignModeBridge] Cannot update component library files via message. Source:', fileName);
-          console.warn('[DesignModeBridge] Please edit the source file directly at:', fileName);
-          return;
-        }
-
         // 验证源信息是否匹配
         const elementSourceInfo = {
           fileName: selectedElement.getAttribute(AttributeNames.file) || '',

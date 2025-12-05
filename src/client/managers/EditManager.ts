@@ -40,21 +40,6 @@ export class EditManager {
       return;
     }
 
-    // 文件级别保护：阻止编辑组件库文件
-    // 只允许编辑页面/应用文件 (pages/, App.tsx等)
-    const fileName = sourceInfo.fileName;
-    const isComponentFile = fileName.includes('/components/') ||
-      fileName.includes('/ui/') ||
-      fileName.endsWith('card.tsx') ||
-      fileName.endsWith('button.tsx');
-
-    if (isComponentFile) {
-      console.warn('[EditManager] Cannot edit component library files. Source:', fileName);
-      console.warn('[EditManager] This is a pass-through component. React does not preserve usage site information in the DOM.');
-      console.warn('[EditManager] To edit this content, you need to manually edit the source file at:', fileName);
-      return;
-    }
-
     // 保存原始文本和状态
     const originalText = element.innerText;
     const originalContentEditable = element.contentEditable;
