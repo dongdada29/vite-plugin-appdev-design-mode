@@ -712,7 +712,12 @@ export const DesignModeProvider: React.FC<{
    */
   const selectElement = useCallback(
     async (element: HTMLElement | null) => {
-      setSelectedElement(element);
+      if (element && (element.hasAttribute(AttributeNames.staticContent)
+        || element.hasAttribute(AttributeNames.staticClass))) {
+        setSelectedElement(element);
+      } else {
+        setSelectedElement(null);
+      }
 
       // 发送选择信息到父窗口（仅在iframe环境下）
       if (element && config.iframeMode?.enabled) {
@@ -728,6 +733,10 @@ export const DesignModeProvider: React.FC<{
           const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
           const isActuallyPureText = isPureStaticText(element);
           const isStaticText = hasStaticContentAttr && isActuallyPureText;
+
+          // 判断是否为静态 className：
+          // 检查元素是否有 static-class 属性（表示 className 是纯静态字符串，可编辑）
+          const isStaticClass = element.hasAttribute(AttributeNames.staticClass);
 
           // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
           let textContent = '';
@@ -745,6 +754,7 @@ export const DesignModeProvider: React.FC<{
             textContent: textContent,
             sourceInfo,
             isStaticText: isStaticText || false, // 默认为 false
+            isStaticClass: isStaticClass, // 标记 className 是否可编辑
           };
 
           sendToParent({

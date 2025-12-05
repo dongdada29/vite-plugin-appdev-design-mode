@@ -180,6 +180,7 @@ export class SelectionManager {
 
   /**
    * 检查元素是否有效可选择
+   * 只有具有静态文本或静态 className 的元素才能被选中
    */
   private isValidElement(element: HTMLElement): boolean {
     if (!element || !element.tagName) return false;
@@ -197,7 +198,27 @@ export class SelectionManager {
     // 如果设置了只包含元素类型限制
     if (this.config.includeOnlyElements) {
       const validElements = ['DIV', 'SPAN', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BUTTON', 'A'];
-      return validElements.includes(element.tagName);
+      if (!validElements.includes(element.tagName)) {
+        return false;
+      }
+    }
+
+    // 检查元素是否有源码映射信息
+    if (!element.hasAttribute(AttributeNames.info)) {
+      return false;
+    }
+
+    // 只有具有静态文本或静态 className 的元素才能被选中
+    // 如果元素既没有 static-content 也没有 static-class 属性，则不可选中
+    const hasStaticContent = element.hasAttribute(AttributeNames.staticContent);
+    const hasStaticClass = element.hasAttribute(AttributeNames.staticClass);
+
+    console.log('hasStaticContent', element, hasStaticContent);
+    console.log('hasStaticClass', element, hasStaticClass);
+
+    if (!hasStaticContent && !hasStaticClass) {
+      // 该元素的内容和样式都是动态的，不可选中
+      return false;
     }
 
     return true;
@@ -427,6 +448,9 @@ export class SelectionManager {
     const isActuallyPureText = isPureStaticText(targetElement);
     const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
+    // 判断是否为静态 className
+    const isStaticClass = targetElement.hasAttribute(AttributeNames.staticClass);
+
     // 获取文本内容
     let textContent = '';
     if (isStaticText) {
@@ -459,6 +483,7 @@ export class SelectionManager {
       textContent: textContent,
       sourceInfo,
       isStaticText: isStaticText || false,
+      isStaticClass: isStaticClass, // 标记 className 是否可编辑
       componentName: sourceInfo.componentName,
       componentPath: sourceInfo.fileName,
       props,

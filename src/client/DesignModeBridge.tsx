@@ -79,6 +79,10 @@ export const DesignModeBridge: React.FC = () => {
         const isActuallyPureText = isPureStaticText(selectedElement);
         const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
+        // 判断是否为静态 className：
+        // 检查元素是否有 static-class 属性（表示 className 是纯静态字符串，可编辑）
+        const isStaticClass = selectedElement.hasAttribute(AttributeNames.staticClass);
+
         const elementData = {
           tagName: selectedElement.tagName.toLowerCase(),
           className: selectedElement.className || '',
@@ -93,6 +97,7 @@ export const DesignModeBridge: React.FC = () => {
             columnNumber: 0,
           },
           isStaticText: isStaticText || false, // 默认为 false
+          isStaticClass: isStaticClass, // 标记 className 是否可编辑
         };
 
         if (

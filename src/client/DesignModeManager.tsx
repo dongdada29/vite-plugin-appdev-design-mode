@@ -27,12 +27,19 @@ export const DesignModeManager: React.FC = () => {
 
       // Don't handle clicks on context menu
       if ((e.target as HTMLElement).closest(`[${AttributeNames.contextMenu}="true"]`)) return;
+      if (
+        (e.target as HTMLElement).closest(`[${AttributeNames.staticContent}="true"]`)
+        || (e.target as HTMLElement).closest(`[${AttributeNames.staticClass}="true"]`)
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
 
-      e.preventDefault();
-      e.stopPropagation();
+        const target = e.target as HTMLElement;
+        selectElement(target);;
 
-      const target = e.target as HTMLElement;
-      selectElement(target);
+      }
+
+
     };
 
     // Double-click handling is now managed by UpdateManager → EditManager
@@ -135,9 +142,13 @@ export const DesignModeManager: React.FC = () => {
     const handleMouseOver = (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('#__vite_plugin_design_mode__')) return;
       if ((e.target as HTMLElement).closest(`[${AttributeNames.contextMenu}="true"]`)) return;
-
-      const target = e.target as HTMLElement;
-      target.setAttribute('data-design-hover', 'true');
+      if (
+        (e.target as HTMLElement).hasAttribute(AttributeNames.staticContent)
+        || (e.target as HTMLElement).hasAttribute(AttributeNames.staticClass)
+      ) {
+        const target = e.target as HTMLElement;
+        target.setAttribute('data-design-hover', 'true');
+      };
     };
 
     const handleMouseOut = (e: MouseEvent) => {

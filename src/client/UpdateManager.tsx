@@ -172,8 +172,11 @@ export class UpdateManager {
     if (hadHoverState) {
       // 添加标记，表示这是右键菜单保持的 hover 状态
       target.setAttribute(AttributeNames.contextMenuHover, 'true');
-      // 确保 hover 状态保持
-      target.setAttribute('data-design-hover', 'true');
+      if (target.hasAttribute(AttributeNames.staticClass) || target.hasAttribute(AttributeNames.staticContent)) {
+        // 确保 hover 状态保持
+        target.setAttribute('data-design-hover', 'true');
+
+      }
     }
 
     event.preventDefault();

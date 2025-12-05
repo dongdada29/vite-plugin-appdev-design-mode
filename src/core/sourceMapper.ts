@@ -125,6 +125,11 @@ export function createSourceMappingPlugin(
         if (isStaticContent(path)) {
           addStaticContentAttribute(node, path, options);
         }
+
+        // Check if className is static (pure string literal) and add attribute
+        if (isStaticClassName(node)) {
+          addStaticClassAttribute(node, options);
+        }
       },
 
       JSXElement(path: NodePath) {
@@ -395,6 +400,84 @@ function addStaticContentAttribute(node: t.JSXOpeningElement, path: NodePath, op
   if (!isStaticContent(path)) {
     return; // 如果不是纯静态文本，不添加属性
   }
+
+  // Check if attribute already exists
+  const hasAttr = node.attributes.some(a =>
+    t.isJSXAttribute(a) && t.isJSXIdentifier(a.name) && a.name.name === attributeName
+  );
+
+  if (!hasAttr) {
+    node.attributes.unshift(t.jSXAttribute(
+      t.jSXIdentifier(attributeName),
+      t.stringLiteral('true')
+    ));
+  }
+}
+
+/**
+ * Check if the className attribute is static (pure string literal)
+ * className 是静态的条件：
+ * 1. className 属性值是字符串字面量（如 className="text-lg"）
+ * 2. 或者 className 属性不存在（也认为是可编辑的）
+ * 
+ * className 不是静态的条件（包含变量/表达式）：
+ * 1. className={someVariable}
+ * 2. className={`template ${variable}`}
+ * 3. className={condition ? 'a' : 'b'}
+ * 4. className={cn('base', variable)}
+ */
+function isStaticClassName(node: t.JSXOpeningElement): boolean {
+  // 查找 className 属性
+  const classNameAttr = node.attributes.find(attr =>
+    t.isJSXAttribute(attr) &&
+    t.isJSXIdentifier(attr.name) &&
+    attr.name.name === 'className'
+  ) as t.JSXAttribute | undefined;
+
+  // 如果没有 className 属性，认为是静态的（可以添加新的 className）
+  if (!classNameAttr) {
+    return true;
+  }
+
+  const value = classNameAttr.value;
+
+  // 如果值是字符串字面量，是静态的
+  if (t.isStringLiteral(value)) {
+    return true;
+  }
+
+  // 如果值是表达式容器
+  if (t.isJSXExpressionContainer(value)) {
+    const expression = value.expression;
+
+    // 字符串字面量也可以写在表达式容器中：className={"text-lg"}
+    if (t.isStringLiteral(expression)) {
+      return true;
+    }
+
+    // 模板字面量不包含任何表达式时也是静态的：className={`text-lg font-bold`}
+    if (t.isTemplateLiteral(expression)) {
+      // 检查模板字面量是否只有静态部分（没有 ${} 表达式）
+      if (expression.expressions.length === 0) {
+        return true;
+      }
+    }
+
+    // 其他所有情况都认为是动态的（包含变量）
+    return false;
+  }
+
+  // 其他情况（如 null, undefined 等）认为是静态的
+  return true;
+}
+
+/**
+ * Add static-class attribute (使用配置的前缀)
+ * 只有在 className 是纯静态字符串时才会添加此属性
+ */
+function addStaticClassAttribute(node: t.JSXOpeningElement, options: Required<DesignModeOptions>) {
+  const { attributePrefix } = options;
+  const attributeName = `${attributePrefix}-static-class`;
 
   // Check if attribute already exists
   const hasAttr = node.attributes.some(a =>

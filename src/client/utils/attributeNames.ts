@@ -107,6 +107,13 @@ export const AttributeNames = {
   get import() {
     return getAttributeName('import');
   },
+  /**
+   * Get the static-class attribute name (for tracking if className is a pure static string)
+   * Example: data-xagi-static-class
+   */
+  get staticClass() {
+    return getAttributeName('static-class');
+  },
 } as const;
 
 /**

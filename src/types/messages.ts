@@ -18,6 +18,7 @@ export interface ElementInfo {
   textContent: string;
   sourceInfo: SourceInfo;
   isStaticText: boolean;
+  isStaticClass?: boolean; // 标记 className 是否是纯静态字符串（可编辑）
   componentName?: string;
   componentPath?: string;
   props?: Record<string, string>;
