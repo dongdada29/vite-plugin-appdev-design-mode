@@ -1,18 +1,22 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-import appdevDesignMode from '@xagi/vite-plugin-design-mode';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import appdevDesignMode from "@xagi/vite-plugin-design-mode";
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
+    react(),
+    appdevDesignMode(),
 
     // <!-- DEV-INJECT-START -->
     {
-      name: 'dev-inject',
-      enforce: 'post', // 确保在 HTML 注入阶段最后执行
+      name: "dev-inject",
+      enforce: "post", // 确保在 HTML 注入阶段最后执行
       transformIndexHtml(html) {
         if (!html.includes('data-id="dev-inject-monitor"')) {
-          return html.replace("</head>", `
+          return html.replace(
+            "</head>",
+            `
     <script data-id="dev-inject-monitor">
       (function() {
         const remote = "/sdk/dev-monitor.js";
@@ -27,18 +31,17 @@ export default defineConfig({
         }
       })();
     </script>
-  \n</head>`);
+  \n</head>`,
+          );
         }
         return html;
-      }
+      },
     },
     // <!-- DEV-INJECT-END -->
-    react(),
-      appdevDesignMode()
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
-    }
-  }
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
 });

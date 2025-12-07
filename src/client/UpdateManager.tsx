@@ -129,21 +129,21 @@ export class UpdateManager {
 
     // 检查元素是否有 static-content 属性且值为 'true'（必须条件）
     // 使用 AttributeNames.staticContent 来获取正确的属性名（支持可配置前缀，如 data-xagi-static-content）
-    const staticContentAttr = target.getAttribute(AttributeNames.staticContent);
-    if (staticContentAttr !== 'true') {
-      // 如果 static-content 属性不存在或值不为 'true'，不允许编辑
-      return;
-    }
+    // const staticContentAttr = target.getAttribute(AttributeNames.staticContent);
+    // if (staticContentAttr !== 'true') {
+    //   // 如果 static-content 属性不存在或值不为 'true'，不允许编辑
+    //   return;
+    // }
 
     // 防止默认行为
     event.preventDefault();
     event.stopPropagation();
 
-    // Check if it's pure static text - REMOVED to let EditManager handle validation
-    // if (!isPureStaticText(target)) {
-    //   console.log('[UpdateManager] Ignored dblclick on non-static text element');
-    //   return;
-    // }
+    // Check if it's pure static text - Re-enabled to validate since we don't have the attribute anymore
+    if (!isPureStaticText(target)) {
+      console.log('[UpdateManager] Ignored dblclick on non-static text element');
+      return;
+    }
 
     // 进入编辑模式（仅在 design 模式下）
     this.editManager.handleDirectEdit(target, 'content');

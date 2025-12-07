@@ -1,7 +1,6 @@
-import type { Plugin } from 'vite';
-import { createServerMiddleware } from './core/serverMiddleware';
-import { transformSourceCode } from './core/astTransformer';
-
+import type { Plugin, PluginOption } from "vite";
+import { createServerMiddleware } from "./core/serverMiddleware";
+import ReactInspector from "vite-plugin-react-inspector";
 
 export interface DesignModeOptions {
   /**
@@ -54,31 +53,34 @@ export interface DesignModeOptions {
 const DEFAULT_OPTIONS: Required<DesignModeOptions> = {
   enabled: true,
   enableInProduction: false,
-  attributePrefix: 'data-xagi',
+  attributePrefix: "data-xagi",
   verbose: true,
-  exclude: ['node_modules', 'dist'],
-  include: ['src/**/*.{ts,js,tsx,jsx}'],
+  exclude: ["node_modules", "dist"],
+  include: ["src/**/*.{ts,js,tsx,jsx}"],
   enableBackup: false,
   enableHistory: false,
 };
 
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
+import { existsSync, readFileSync } from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // 虚拟模块 ID，用于在 Vite 中加载客户端代码
-const VIRTUAL_CLIENT_MODULE_ID = 'virtual:appdev-design-mode-client';
-const RESOLVED_VIRTUAL_CLIENT_MODULE_ID = '\0' + VIRTUAL_CLIENT_MODULE_ID + '.tsx';
+const VIRTUAL_CLIENT_MODULE_ID = "virtual:appdev-design-mode-client";
+const RESOLVED_VIRTUAL_CLIENT_MODULE_ID =
+  "\0" + VIRTUAL_CLIENT_MODULE_ID + ".tsx";
 
-function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
+function appdevDesignModePlugin(
+  userOptions: DesignModeOptions = {},
+): PluginOption {
   const options = { ...DEFAULT_OPTIONS, ...userOptions };
   // 保存 base 配置，用于构建正确的客户端代码路径
-  let basePath = '/';
+  let basePath = "/";
   // 保存当前命令（serve 或 build），用于判断是否为开发环境
-  let currentCommand: 'serve' | 'build' = 'serve';
+  let currentCommand: "serve" | "build" = "serve";
 
   // 检查插件是否应该生效
   // 仅在开发环境（serve）或明确启用生产环境时生效
@@ -87,15 +89,25 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       return false;
     }
     // 如果是构建模式且未启用生产环境支持，则禁用插件
-    if (currentCommand === 'build' && !options.enableInProduction) {
+    if (currentCommand === "build" && !options.enableInProduction) {
       return false;
     }
     return true;
   };
 
-  return {
-    name: '@xagi/vite-plugin-design-mode',
-    enforce: 'pre',
+  const inspectorPlugin = (ReactInspector as any)({
+    enabled: isPluginEnabled(),
+    toggleButtonVisibility: "never", // Hide the default UI
+    include: options.include,
+    exclude: options.exclude,
+  });
+
+  // Force inspectorPlugin to run after @vitejs/plugin-react
+  inspectorPlugin.enforce = "post";
+
+  const designModePlugin: Plugin = {
+    name: "@xagi/vite-plugin-design-mode",
+    enforce: "pre",
 
     // 解析虚拟模块 ID
     resolveId(id) {
@@ -120,12 +132,12 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         const clientEntryPath = resolveClientEntryPath();
         if (!existsSync(clientEntryPath)) {
           throw new Error(
-            `[appdev-design-mode] 客户端入口文件不存在: ${clientEntryPath}`
+            `[appdev-design-mode] 客户端入口文件不存在: ${clientEntryPath}`,
           );
         }
         // 读取文件内容并重写相对导入为绝对路径
         // 这样虚拟模块可以正确解析依赖
-        const code = readFileSync(clientEntryPath, 'utf-8');
+        const code = readFileSync(clientEntryPath, "utf-8");
         const clientDir = dirname(clientEntryPath);
 
         // 重写相对导入为绝对路径 imports
@@ -134,31 +146,10 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
           (match, moduleName) => {
             const absolutePath = resolve(clientDir, moduleName);
             return `from '${absolutePath}'`;
-          }
+          },
         );
 
         return rewrittenCode;
-      }
-
-      // **NEW: Process tsx/jsx files in load hook BEFORE React plugin**
-      // This allows us to add attributes to JSX elements before they are compiled
-      const shouldProcess = shouldProcessFile(id, options);
-
-      if (shouldProcess) {
-        try {
-          // Read the original file content
-          const code = readFileSync(id, 'utf-8');
-
-          // Transform the code to add data attributes
-          const transformedCode = transformSourceCode(code, id, options);
-
-          // Return the transformed code
-          // React plugin will then process this code to compile JSX
-          return transformedCode;
-        } catch (error) {
-          // Return null to let other plugins handle it
-          return null;
-        }
       }
 
       return null;
@@ -169,13 +160,13 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       currentCommand = command;
 
       // 保存 base 配置，确保路径正确
-      basePath = config.base || '/';
+      basePath = config.base || "/";
       // 规范化 base 路径：确保以 / 开头和结尾（除非是根路径）
-      if (!basePath.startsWith('/')) {
-        basePath = '/' + basePath;
+      if (!basePath.startsWith("/")) {
+        basePath = "/" + basePath;
       }
-      if (basePath !== '/' && !basePath.endsWith('/')) {
-        basePath = basePath + '/';
+      if (basePath !== "/" && !basePath.endsWith("/")) {
+        basePath = basePath + "/";
       }
 
       // 只在开发模式启用
@@ -188,7 +179,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
       // 合并用户已有的 fs.allow 配置
       const existingAllow = config.server?.fs?.allow || [];
-      const pluginDistPath = resolve(__dirname, '..');
+      const pluginDistPath = resolve(__dirname, "..");
 
       // 构建允许访问的目录列表（使用 Set 自动去重）
       const allowedPaths = new Set<string>();
@@ -204,7 +195,7 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       allowedPaths.add(resolve(projectRoot));
 
       // 添加 node_modules 目录（通常也需要访问）
-      const nodeModulesPath = resolve(projectRoot, 'node_modules');
+      const nodeModulesPath = resolve(projectRoot, "node_modules");
       allowedPaths.add(nodeModulesPath);
 
       // 添加插件的 dist 目录（用于加载客户端代码）
@@ -216,13 +207,13 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
           __APPDEV_DESIGN_MODE_VERBOSE__: options.verbose,
         },
         esbuild: {
-          logOverride: { 'this-is-undefined-in-esm': 'silent' },
-          jsx: 'automatic', // Ensure JSX automatic mode for all projects
-          jsxDev: false,    // Disable dev mode for better performance
+          logOverride: { "this-is-undefined-in-esm": "silent" },
+          jsx: "automatic", // Ensure JSX automatic mode for all projects
+          jsxDev: false, // Disable dev mode for better performance
         },
         optimizeDeps: {
           // 确保 React 和 ReactDOM 被正确预构建
-          include: ['react', 'react-dom'],
+          include: ["react", "react-dom"],
         },
         server: {
           fs: {
@@ -243,11 +234,11 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       server.middlewares.use(async (req, res, next) => {
         // 匹配客户端代码请求（支持带或不带 base 路径）
         // Vite 的中间件 URL 可能已经处理了 base 路径，所以使用灵活的匹配
-        const url = req.url || '';
+        const url = req.url || "";
         const isClientRequest =
-          url === '/@appdev-design-mode/client.js' ||
-          url.endsWith('/@appdev-design-mode/client.js') ||
-          url.includes('@appdev-design-mode/client.js');
+          url === "/@appdev-design-mode/client.js" ||
+          url.endsWith("/@appdev-design-mode/client.js") ||
+          url.includes("@appdev-design-mode/client.js");
 
         if (isClientRequest) {
           try {
@@ -257,28 +248,25 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
             // Vite 会自动从项目的依赖中解析 React 和 ReactDOM（因为它们现在是 peerDependencies）
             const result = await server.transformRequest(
               VIRTUAL_CLIENT_MODULE_ID,
-              { ssr: false }
+              { ssr: false },
             );
 
             if (result && result.code) {
               res.statusCode = 200;
-              res.setHeader('Content-Type', 'application/javascript');
-              res.setHeader('Cache-Control', 'no-cache');
+              res.setHeader("Content-Type", "application/javascript");
+              res.setHeader("Cache-Control", "no-cache");
               res.end(result.code);
             } else {
-              throw new Error('transformRequest returned no code');
+              throw new Error("transformRequest returned no code");
             }
           } catch (error: any) {
             res.statusCode = 500;
-            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader("Content-Type", "text/plain");
             res.end(
-              `[appdev-design-mode] 加载客户端代码失败: ${error.message}`
+              `[appdev-design-mode] 加载客户端代码失败: ${error.message}`,
             );
             if (options.verbose) {
-              console.error(
-                '[appdev-design-mode] 客户端代码加载错误:',
-                error
-              );
+              console.error("[appdev-design-mode] 客户端代码加载错误:", error);
             }
           }
           return;
@@ -289,8 +277,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
       // Register the main API middleware - this handles all /__appdev_design_mode/* endpoints
       server.middlewares.use(
-        '/__appdev_design_mode',
-        createServerMiddleware(options, server.config.root)
+        "/__appdev_design_mode",
+        createServerMiddleware(options, server.config.root),
       );
     },
 
@@ -302,7 +290,8 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
       // 构建基于 base 路径的客户端代码 URL
       // 确保路径相对于 base 配置，支持子路径部署
-      const clientScriptPath = `${basePath}@appdev-design-mode/client.js`.replace(/\/+/g, '/');
+      const clientScriptPath =
+        `${basePath}@appdev-design-mode/client.js`.replace(/\/+/g, "/");
 
       // 使用 HTTP 端点来加载客户端代码，而不是虚拟模块或 /@fs 协议
       // 这样可以避免 node_modules 访问限制和 CORS 问题
@@ -311,22 +300,22 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
         tags: [
           // 注入配置到全局变量，供客户端代码使用
           {
-            tag: 'script',
+            tag: "script",
             attrs: {
-              type: 'text/javascript',
+              type: "text/javascript",
             },
-            injectTo: 'head',
+            injectTo: "head",
             children: `window.__APPDEV_DESIGN_MODE_CONFIG__ = ${JSON.stringify({
               attributePrefix: options.attributePrefix,
             })};`,
           },
           {
-            tag: 'script',
+            tag: "script",
             attrs: {
-              type: 'module',
+              type: "module",
               src: clientScriptPath,
             },
-            injectTo: 'body',
+            injectTo: "body",
           },
         ],
       };
@@ -340,12 +329,12 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
 
       // 特殊处理虚拟模块：使用 transformWithEsbuild 转换 JSX
       if (id === RESOLVED_VIRTUAL_CLIENT_MODULE_ID) {
-        const { transformWithEsbuild } = await import('vite');
+        const { transformWithEsbuild } = await import("vite");
         const result = await transformWithEsbuild(code, id, {
-          loader: 'tsx',
-          jsx: 'automatic',
+          loader: "tsx",
+          jsx: "automatic",
           // 确保 React 和 ReactDOM 被正确解析
-          format: 'esm',
+          format: "esm",
         });
         return result.code;
       }
@@ -353,108 +342,44 @@ function appdevDesignModePlugin(userOptions: DesignModeOptions = {}): Plugin {
       // 处理插件自己的客户端代码文件
       // 这样可以防止用户项目的 @vitejs/plugin-react 处理这些文件
       // 避免 babel-plugin 依赖冲突（特别是在 pnpm 项目中）
-      const pluginDistPath = resolve(__dirname, '..');
-      if (id.startsWith(pluginDistPath) && (id.endsWith('.tsx') || id.endsWith('.ts'))) {
-        const { transformWithEsbuild } = await import('vite');
+      const pluginDistPath = resolve(__dirname, "..");
+      if (
+        id.startsWith(pluginDistPath) &&
+        (id.endsWith(".tsx") || id.endsWith(".ts"))
+      ) {
+        const { transformWithEsbuild } = await import("vite");
         const result = await transformWithEsbuild(code, id, {
-          loader: id.endsWith('.tsx') ? 'tsx' : 'ts',
-          jsx: 'automatic',
-          format: 'esm',
+          loader: id.endsWith(".tsx") ? "tsx" : "ts",
+          jsx: "automatic",
+          format: "esm",
         });
         return result.code;
       }
 
-      // 检查文件是否应该被处理
-      const shouldProcess = shouldProcessFile(id, options);
-
-      if (!shouldProcess) {
-        return code;
-      }
-
-      try {
-        const transformedCode = transformSourceCode(code, id, options);
-        return transformedCode;
-      } catch (error) {
-        return code;
-      }
+      return code;
     },
 
     buildStart() {
       if (options.verbose) {
-        console.log('[appdev-design-mode] Plugin started');
+        console.log("[appdev-design-mode] Plugin started");
       }
     },
 
     buildEnd() {
       if (options.verbose) {
-        console.log('[appdev-design-mode] Plugin ended');
+        console.log("[appdev-design-mode] Plugin ended");
       }
     },
   };
-}
 
-// 检查文件是否应该被处理
-// 检查文件是否应该被处理
-function shouldProcessFile(
-  filePath: string,
-  options: Required<DesignModeOptions>
-): boolean {
-  // 检查是否在排除列表中
-  if (options.exclude.some(pattern => filePath.includes(pattern))) {
-    return false;
-  }
-
-  // 检查是否在包含列表中
-  const isIncluded = options.include.some(pattern => {
-    // Ignore negation patterns in include (rely on exclude option)
-    if (pattern.startsWith('!')) {
-      return false;
-    }
-
-    // Convert glob to regex using placeholders to avoid escaping issues
-    let regex = pattern;
-
-    // 1. Replace glob syntax with placeholders
-    // IMPORTANT: Replace **/ as a unit first to avoid double slashes
-    regex = regex.replace(/\*\*\//g, '%%GLOBSTAR_SLASH%%');
-    regex = regex.replace(/\*\*/g, '%%GLOBSTAR%%');
-    regex = regex.replace(/\*/g, '%%WILDCARD%%');
-    regex = regex.replace(/\{([^}]+)\}/g, (_, group) =>
-      `%%BRACE_START%%${group.replace(/,/g, '%%COMMA%%')}%%BRACE_END%%`
-    );
-
-    // 2. Escape special regex characters
-    regex = regex.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-
-    // 3. Restore placeholders with regex equivalents
-    // **/ matches zero or more path segments (e.g., "", "foo/", "foo/bar/")
-    regex = regex.replace(/%%GLOBSTAR_SLASH%%/g, '(([^/]+/)*)');
-    // ** alone (rare) matches any characters
-    regex = regex.replace(/%%GLOBSTAR%%/g, '.*');
-    regex = regex.replace(/%%WILDCARD%%/g, '[^/]*');
-    regex = regex.replace(/%%BRACE_START%%/g, '(');
-    regex = regex.replace(/%%BRACE_END%%/g, ')');
-    regex = regex.replace(/%%COMMA%%/g, '|');
-
-    // 4. Create RegExp
-    // Allow partial match for absolute paths by prepending .* if not already there
-    // and not anchored
-    if (!regex.startsWith('.*') && !regex.startsWith('^')) {
-      regex = '.*' + regex;
-    }
-
-    const re = new RegExp(regex + '$'); // Anchor to end
-    return re.test(filePath);
-  });
-
-  return isIncluded;
+  return [inspectorPlugin, designModePlugin];
 }
 
 export default appdevDesignModePlugin;
 
 function resolveClientEntryPath(): string {
-  const distClientPath = resolve(__dirname, 'client/index.tsx');
-  const sourceClientPath = resolve(__dirname, '../src/client/index.tsx');
+  const distClientPath = resolve(__dirname, "client/index.tsx");
+  const sourceClientPath = resolve(__dirname, "../src/client/index.tsx");
 
   if (existsSync(distClientPath)) {
     return distClientPath;
@@ -465,7 +390,6 @@ function resolveClientEntryPath(): string {
   }
 
   throw new Error(
-    '[appdev-design-mode] 无法定位客户端入口文件 client/index.tsx'
+    "[appdev-design-mode] 无法定位客户端入口文件 client/index.tsx",
   );
 }
-

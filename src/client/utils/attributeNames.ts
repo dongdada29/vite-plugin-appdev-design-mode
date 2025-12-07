@@ -5,21 +5,23 @@
  */
 
 // 默认前缀（如果配置未注入，使用此默认值）
-const DEFAULT_PREFIX = 'data-xagi';
+const DEFAULT_PREFIX = "data-xagi";
 
 // 从全局配置或 meta 标签获取属性前缀
 function getAttributePrefix(): string {
   // 尝试从全局变量获取
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     const globalConfig = (window as any).__APPDEV_DESIGN_MODE_CONFIG__;
     if (globalConfig?.attributePrefix) {
       return globalConfig.attributePrefix;
     }
 
     // 尝试从 meta 标签获取
-    const metaTag = document.querySelector('meta[name="appdev-design-mode:attribute-prefix"]');
+    const metaTag = document.querySelector(
+      'meta[name="appdev-design-mode:attribute-prefix"]',
+    );
     if (metaTag) {
-      const prefix = metaTag.getAttribute('content');
+      const prefix = metaTag.getAttribute("content");
       if (prefix) {
         return prefix;
       }
@@ -64,48 +66,51 @@ export function getAttributeName(suffix: string): string {
  * 属性名常量（使用函数确保使用最新配置）
  */
 export const AttributeNames = {
+  // vite-plugin-react-inspector attributes
   get file() {
-    return getAttributeName('file');
+    return "data-react-inspector";
   },
   get line() {
-    return getAttributeName('line');
+    return "data-react-inspector";
   },
   get column() {
-    return getAttributeName('column');
+    return "data-react-inspector";
   },
+
+  // Custom attributes that we might still inject or use for other purposes
   get info() {
-    return getAttributeName('info');
+    return getAttributeName("info");
   },
   get elementId() {
-    return getAttributeName('element-id');
+    return getAttributeName("element-id");
   },
   get component() {
-    return getAttributeName('component');
+    return getAttributeName("component");
   },
   get function() {
-    return getAttributeName('function');
+    return getAttributeName("function");
   },
   get position() {
-    return getAttributeName('position');
+    return getAttributeName("position");
   },
   get staticContent() {
-    return getAttributeName('static-content');
+    return getAttributeName("static-content");
   },
   /**
    * Get the children source attribute name (for tracking where static children come from)
    * Example: data-xagi-children-source
    */
   get childrenSource() {
-    return getAttributeName('children-source');
+    return getAttributeName("children-source");
   },
   get contextMenu() {
-    return getAttributeName('context-menu');
+    return getAttributeName("context-menu");
   },
   get contextMenuHover() {
-    return getAttributeName('context-menu-hover');
+    return getAttributeName("context-menu-hover");
   },
   get import() {
-    return getAttributeName('import');
+    return getAttributeName("import");
   },
 } as const;
 
@@ -116,6 +121,8 @@ export const AttributeNames = {
  */
 export function isSourceMappingAttribute(attributeName: string): boolean {
   const prefix = getPrefix();
-  return attributeName.startsWith(`${prefix}-`);
+  return (
+    attributeName.startsWith(`${prefix}-`) ||
+    attributeName.startsWith("data-inspector-")
+  );
 }
-

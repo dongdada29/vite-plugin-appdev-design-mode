@@ -4,8 +4,8 @@ import React, {
   useState,
   useCallback,
   useEffect,
-} from 'react';
-import { twMerge } from 'tailwind-merge';
+} from "react";
+import { twMerge } from "tailwind-merge";
 import {
   DesignModeMessage,
   ParentToIframeMessage,
@@ -20,16 +20,16 @@ import {
   HeartbeatMessage,
   HealthCheckMessage,
   HealthCheckResponseMessage,
-} from '../types/messages';
-import { bridge, messageValidator } from './bridge';
-import { AttributeNames } from './utils/attributeNames';
-import { isPureStaticText } from './utils/elementUtils';
-import { extractSourceInfo } from './utils/sourceInfo';
+} from "../types/messages";
+import { bridge, messageValidator } from "./bridge";
+import { AttributeNames } from "./utils/attributeNames";
+import { isPureStaticText } from "./utils/elementUtils";
+import { extractSourceInfo } from "./utils/sourceInfo";
 
 export interface Modification {
   id: string;
   element: string;
-  type: 'class' | 'style';
+  type: "class" | "style";
   oldValue: string;
   newValue: string;
   timestamp: number;
@@ -56,7 +56,7 @@ interface DesignModeContextType {
   selectedElement: HTMLElement | null;
   modifications: Modification[];
   isConnected: boolean;
-  bridgeStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
+  bridgeStatus: "connected" | "disconnected" | "connecting" | "error";
 
   // 配置
   config: DesignModeConfig;
@@ -67,15 +67,15 @@ interface DesignModeContextType {
   modifyElementClass: (element: HTMLElement, newClass: string) => Promise<void>;
   updateElementContent: (
     element: HTMLElement,
-    newContent: string
+    newContent: string,
   ) => Promise<void>;
   batchUpdateElements: (
     updates: Array<{
       element: HTMLElement;
-      type: 'style' | 'content';
+      type: "style" | "content";
       newValue: string;
       originalValue?: string;
-    }>
+    }>,
   ) => Promise<void>;
   resetModifications: () => void;
 
@@ -86,13 +86,13 @@ interface DesignModeContextType {
     R extends DesignModeMessage,
   >(
     message: T,
-    responseType: R['type']
+    responseType: R["type"],
   ) => Promise<R>;
   healthCheck: () => Promise<any>;
 }
 
 const DesignModeContext = createContext<DesignModeContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const DesignModeProvider: React.FC<{
@@ -116,7 +116,7 @@ export const DesignModeProvider: React.FC<{
       timeout: 10000,
       retryAttempts: 3,
       heartbeatInterval: 30000,
-      debug: process.env.NODE_ENV === 'development',
+      debug: process.env.NODE_ENV === "development",
     },
     ...userConfig,
   };
@@ -124,13 +124,13 @@ export const DesignModeProvider: React.FC<{
   // 状态
   const [isDesignMode, setIsDesignMode] = useState(false);
   const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(
-    null
+    null,
   );
   const [modifications, setModifications] = useState<Modification[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<
-    'connected' | 'disconnected' | 'connecting' | 'error'
-  >('connecting');
+    "connected" | "disconnected" | "connecting" | "error"
+  >("connecting");
   const [config] = useState<DesignModeConfig>(defaultConfig);
 
   // 批量更新防抖
@@ -139,7 +139,7 @@ export const DesignModeProvider: React.FC<{
   const [pendingBatchUpdates, setPendingBatchUpdates] = useState<
     Array<{
       element: HTMLElement;
-      type: 'style' | 'content';
+      type: "style" | "content";
       newValue: string;
       originalValue?: string;
     }>
@@ -151,13 +151,13 @@ export const DesignModeProvider: React.FC<{
   useEffect(() => {
     // 初始化桥接器
     if (config.iframeMode?.enabled) {
-      setBridgeStatus('connecting');
+      setBridgeStatus("connecting");
 
       // 监听桥接器连接状态
       const connectionCheck = setInterval(() => {
         const connected = bridge.isConnected();
         setIsConnected(connected);
-        setBridgeStatus(connected ? 'connected' : 'disconnected');
+        setBridgeStatus(connected ? "connected" : "disconnected");
       }, 1000);
 
       // 设置消息监听器
@@ -165,87 +165,88 @@ export const DesignModeProvider: React.FC<{
 
       // 监听设计模式切换
       unsubscribeHandlers.push(
-        bridge.on<ToggleDesignModeMessage>('TOGGLE_DESIGN_MODE', message => {
+        bridge.on<ToggleDesignModeMessage>("TOGGLE_DESIGN_MODE", (message) => {
           const newState = message.enabled;
           setIsDesignMode(newState);
 
           // 确认状态变化
           if (window.self !== window.top) {
             sendToParent({
-              type: 'DESIGN_MODE_CHANGED',
+              type: "DESIGN_MODE_CHANGED",
               enabled: newState,
               timestamp: Date.now(),
             });
           }
-        })
+        }),
       );
 
       // 监听样式更新
       unsubscribeHandlers.push(
-        bridge.on<UpdateStyleMessage>('UPDATE_STYLE', async message => {
+        bridge.on<UpdateStyleMessage>("UPDATE_STYLE", async (message) => {
           await handleExternalStyleUpdate(message);
-        })
+        }),
       );
 
       // 监听内容更新
       unsubscribeHandlers.push(
-        bridge.on<UpdateContentMessage>('UPDATE_CONTENT', async message => {
+        bridge.on<UpdateContentMessage>("UPDATE_CONTENT", async (message) => {
           await handleExternalContentUpdate(message);
-        })
+        }),
       );
 
       // 监听批量更新
       unsubscribeHandlers.push(
-        bridge.on<BatchUpdateMessage>('BATCH_UPDATE', async message => {
+        bridge.on<BatchUpdateMessage>("BATCH_UPDATE", async (message) => {
           await handleExternalBatchUpdate(message);
-        })
+        }),
       );
 
       // 监听心跳
       unsubscribeHandlers.push(
-        bridge.on<HeartbeatMessage>('HEARTBEAT', _ => {
+        bridge.on<HeartbeatMessage>("HEARTBEAT", (_) => {
           // 回复心跳
           bridge.send({
-            type: 'HEARTBEAT',
+            type: "HEARTBEAT",
             payload: { timestamp: Date.now() },
             timestamp: Date.now(),
           });
-        })
+        }),
       );
 
       // 监听健康检查
       unsubscribeHandlers.push(
-        bridge.on<HealthCheckMessage>('HEALTH_CHECK', async message => {
+        bridge.on<HealthCheckMessage>("HEALTH_CHECK", async (message) => {
           const healthStatus = await bridge.healthCheck();
           // Use a type assertion or construct the object carefully to match HealthCheckResponseMessage
           const response: HealthCheckResponseMessage = {
-            type: 'HEALTH_CHECK_RESPONSE',
+            type: "HEALTH_CHECK_RESPONSE",
             payload: {
-              status: healthStatus.status === 'healthy' ? 'healthy' : 'unhealthy',
-              version: '2.0.0',
+              status:
+                healthStatus.status === "healthy" ? "healthy" : "unhealthy",
+              version: "2.0.0",
               uptime: Date.now() - ((window as any).__startTime || 0),
             },
-            requestId: message.requestId || '', // Provide requestId
+            requestId: message.requestId || "", // Provide requestId
             timestamp: Date.now(),
           };
           bridge.send(response);
-        })
+        }),
       );
 
       // 初始健康检查
       const initialHealthCheck = setTimeout(async () => {
         try {
           const health = await bridge.healthCheck();
-          setBridgeStatus(health.status === 'healthy' ? 'connected' : 'error');
+          setBridgeStatus(health.status === "healthy" ? "connected" : "error");
         } catch (error) {
-          setBridgeStatus('error');
+          setBridgeStatus("error");
         }
       }, 1000);
 
       return () => {
         clearInterval(connectionCheck);
         clearTimeout(initialHealthCheck);
-        unsubscribeHandlers.forEach(unsubscribe => unsubscribe());
+        unsubscribeHandlers.forEach((unsubscribe) => unsubscribe());
       };
     }
   }, [config]);
@@ -256,15 +257,15 @@ export const DesignModeProvider: React.FC<{
   const sendToParent = useCallback(
     (message: IframeToParentMessage) => {
       if (config.iframeMode?.enabled && bridge.isConnected()) {
-        bridge.send(message).catch(error => {
+        bridge.send(message).catch((error) => {
           console.error(
-            '[DesignMode] Failed to send message to parent:',
-            error
+            "[DesignMode] Failed to send message to parent:",
+            error,
           );
         });
       }
     },
-    [config.iframeMode?.enabled]
+    [config.iframeMode?.enabled],
   );
 
   /**
@@ -282,8 +283,8 @@ export const DesignModeProvider: React.FC<{
         const validation = messageValidator.validate(updateMessage);
         if (!validation.isValid) {
           console.error(
-            '[DesignMode] Invalid style update message:',
-            validation.errors
+            "[DesignMode] Invalid style update message:",
+            validation.errors,
           );
           return;
         }
@@ -294,20 +295,20 @@ export const DesignModeProvider: React.FC<{
         const element = document.querySelector(selector) as HTMLElement;
         if (!element) {
           console.error(
-            '[DesignMode] Element not found for sourceInfo:',
+            "[DesignMode] Element not found for sourceInfo:",
             sourceInfo,
-            'Selector:',
-            selector
+            "Selector:",
+            selector,
           );
           // 尝试查找所有带有 file 属性的元素
           const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            `[${AttributeNames.file}="${sourceInfo.fileName}"]`,
           );
 
           sendToParent({
-            type: 'ERROR',
+            type: "ERROR",
             payload: {
-              code: 'ELEMENT_NOT_FOUND',
+              code: "ELEMENT_NOT_FOUND",
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
               details: { sourceInfo, selector },
             },
@@ -325,27 +326,28 @@ export const DesignModeProvider: React.FC<{
         if (elementId) {
           // 使用 element-id 查找所有相同的列表项
           const allElementsWithId = Array.from(
-            document.querySelectorAll(`[${AttributeNames.elementId}]`)
+            document.querySelectorAll(`[${AttributeNames.elementId}]`),
           ) as HTMLElement[];
 
-          relatedElements = allElementsWithId.filter(el => {
+          relatedElements = allElementsWithId.filter((el) => {
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
           });
         } else {
-          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
+          console.warn(
+            "[DesignMode] Element missing element-id attribute, only updating current element",
+          );
         }
 
         // 应用样式更新到所有相关元素（列表项同步）
-        relatedElements.forEach(el => {
-          el.setAttribute('data-ignore-mutation', 'true');
+        relatedElements.forEach((el) => {
+          el.setAttribute("data-ignore-mutation", "true");
           el.className = newClass;
           // Use setTimeout to ensure MutationObserver sees the attribute
           setTimeout(() => {
-            el.removeAttribute('data-ignore-mutation');
+            el.removeAttribute("data-ignore-mutation");
           }, 0);
         });
-
 
         // 更新选中的元素状态（如果当前选中的是这个元素）
         if (selectedElement === element) {
@@ -379,7 +381,7 @@ export const DesignModeProvider: React.FC<{
 
         // 发送更新完成消息
         sendToParent({
-          type: 'STYLE_UPDATED',
+          type: "STYLE_UPDATED",
           payload: {
             sourceInfo,
             oldClass,
@@ -387,19 +389,18 @@ export const DesignModeProvider: React.FC<{
           },
           timestamp: Date.now(),
         });
-
       } catch (error) {
         console.error(
-          '[DesignMode] Error handling external style update:',
-          error
+          "[DesignMode] Error handling external style update:",
+          error,
         );
 
         // 发送错误消息
         sendToParent({
-          type: 'ERROR',
+          type: "ERROR",
           payload: {
-            code: 'STYLE_UPDATE_FAILED',
-            message: error instanceof Error ? error.message : 'Unknown error',
+            code: "STYLE_UPDATE_FAILED",
+            message: error instanceof Error ? error.message : "Unknown error",
             details: { sourceInfo: updateMessage.payload.sourceInfo },
           },
           timestamp: Date.now(),
@@ -411,7 +412,7 @@ export const DesignModeProvider: React.FC<{
       config.iframeMode?.enabled,
       sendToParent,
       setSelectedElement,
-    ]
+    ],
   );
 
   /**
@@ -429,8 +430,8 @@ export const DesignModeProvider: React.FC<{
         const validation = messageValidator.validate(updateMessage);
         if (!validation.isValid) {
           console.error(
-            '[DesignMode] Invalid content update message:',
-            validation.errors
+            "[DesignMode] Invalid content update message:",
+            validation.errors,
           );
           return;
         }
@@ -441,20 +442,20 @@ export const DesignModeProvider: React.FC<{
         const element = document.querySelector(selector) as HTMLElement;
         if (!element) {
           console.error(
-            '[DesignMode] Element not found for sourceInfo:',
+            "[DesignMode] Element not found for sourceInfo:",
             sourceInfo,
-            'Selector:',
-            selector
+            "Selector:",
+            selector,
           );
           // 尝试查找所有带有 file 属性的元素
           const allElements = document.querySelectorAll(
-            `[${AttributeNames.file}="${sourceInfo.fileName}"]`
+            `[${AttributeNames.file}="${sourceInfo.fileName}"]`,
           );
 
           sendToParent({
-            type: 'ERROR',
+            type: "ERROR",
             payload: {
-              code: 'ELEMENT_NOT_FOUND',
+              code: "ELEMENT_NOT_FOUND",
               message: `Element not found: ${sourceInfo.fileName}:${sourceInfo.lineNumber}:${sourceInfo.columnNumber}`,
               details: { sourceInfo, selector },
             },
@@ -463,7 +464,7 @@ export const DesignModeProvider: React.FC<{
           return;
         }
 
-        const originalContent = element.innerText || element.textContent || '';
+        const originalContent = element.innerText || element.textContent || "";
 
         // 查找所有具有相同 element-id 的元素（列表项同步）
         const elementId = element.getAttribute(AttributeNames.elementId);
@@ -472,27 +473,28 @@ export const DesignModeProvider: React.FC<{
         if (elementId) {
           // 使用 element-id 查找所有相同的列表项
           const allElementsWithId = Array.from(
-            document.querySelectorAll(`[${AttributeNames.elementId}]`)
+            document.querySelectorAll(`[${AttributeNames.elementId}]`),
           ) as HTMLElement[];
 
-          relatedElements = allElementsWithId.filter(el => {
+          relatedElements = allElementsWithId.filter((el) => {
             const elId = el.getAttribute(AttributeNames.elementId);
             return elId === elementId;
           });
         } else {
-          console.warn('[DesignMode] Element missing element-id attribute, only updating current element');
+          console.warn(
+            "[DesignMode] Element missing element-id attribute, only updating current element",
+          );
         }
 
         // 应用内容更新到所有相关元素（列表项同步）
-        relatedElements.forEach(el => {
-          el.setAttribute('data-ignore-mutation', 'true');
+        relatedElements.forEach((el) => {
+          el.setAttribute("data-ignore-mutation", "true");
           el.innerText = newContent;
           // Use setTimeout to ensure MutationObserver sees the attribute
           setTimeout(() => {
-            el.removeAttribute('data-ignore-mutation');
+            el.removeAttribute("data-ignore-mutation");
           }, 0);
         });
-
 
         // 更新选中的元素状态（如果当前选中的是这个元素）
         if (selectedElement === element) {
@@ -532,7 +534,7 @@ export const DesignModeProvider: React.FC<{
 
         // 发送更新完成消息
         sendToParent({
-          type: 'CONTENT_UPDATED_CALLBACK',
+          type: "CONTENT_UPDATED_CALLBACK",
           payload: {
             sourceInfo,
             oldValue: originalContent,
@@ -540,19 +542,18 @@ export const DesignModeProvider: React.FC<{
           },
           timestamp: Date.now(),
         });
-
       } catch (error) {
         console.error(
-          '[DesignMode] Error handling external content update:',
-          error
+          "[DesignMode] Error handling external content update:",
+          error,
         );
 
         // 发送错误消息
         sendToParent({
-          type: 'ERROR',
+          type: "ERROR",
           payload: {
-            code: 'CONTENT_UPDATE_FAILED',
-            message: error instanceof Error ? error.message : 'Unknown error',
+            code: "CONTENT_UPDATE_FAILED",
+            message: error instanceof Error ? error.message : "Unknown error",
             details: { sourceInfo: updateMessage.payload.sourceInfo },
           },
           timestamp: Date.now(),
@@ -564,7 +565,7 @@ export const DesignModeProvider: React.FC<{
       config.iframeMode?.enabled,
       sendToParent,
       setSelectedElement,
-    ]
+    ],
   );
 
   /**
@@ -580,8 +581,8 @@ export const DesignModeProvider: React.FC<{
         const validation = messageValidator.validate(updateMessage);
         if (!validation.isValid) {
           console.error(
-            '[DesignMode] Invalid batch update message:',
-            validation.errors
+            "[DesignMode] Invalid batch update message:",
+            validation.errors,
           );
           return;
         }
@@ -592,47 +593,52 @@ export const DesignModeProvider: React.FC<{
             const element = findElementBySourceInfo(update.sourceInfo);
             if (!element) {
               throw new Error(
-                `Element not found: ${update.sourceInfo.fileName}:${update.sourceInfo.lineNumber}`
+                `Element not found: ${update.sourceInfo.fileName}:${update.sourceInfo.lineNumber}`,
               );
             }
 
-            if (update.type === 'style') {
-              element.setAttribute('data-ignore-mutation', 'true');
+            if (update.type === "style") {
+              element.setAttribute("data-ignore-mutation", "true");
               element.className = update.newValue;
-              setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
-            } else if (update.type === 'content') {
-              element.setAttribute('data-ignore-mutation', 'true');
+              setTimeout(
+                () => element.removeAttribute("data-ignore-mutation"),
+                0,
+              );
+            } else if (update.type === "content") {
+              element.setAttribute("data-ignore-mutation", "true");
               element.innerText = update.newValue;
-              setTimeout(() => element.removeAttribute('data-ignore-mutation'), 0);
+              setTimeout(
+                () => element.removeAttribute("data-ignore-mutation"),
+                0,
+              );
             }
 
             await updateSource(
               element,
               update.newValue,
               update.type,
-              update.originalValue
+              update.originalValue,
             );
 
             return { success: true, sourceInfo: update.sourceInfo };
-          })
+          }),
         );
-
       } catch (error) {
-        console.error('[DesignMode] Error handling batch update:', error);
+        console.error("[DesignMode] Error handling batch update:", error);
 
         // 发送错误消息
         sendToParent({
-          type: 'ERROR',
+          type: "ERROR",
           payload: {
-            code: 'BATCH_UPDATE_FAILED',
-            message: error instanceof Error ? error.message : 'Unknown error',
+            code: "BATCH_UPDATE_FAILED",
+            message: error instanceof Error ? error.message : "Unknown error",
             details: { updatesCount: updates?.length || 0 },
           },
           timestamp: Date.now(),
         });
       }
     },
-    []
+    [],
   );
 
   /**
@@ -643,7 +649,7 @@ export const DesignModeProvider: React.FC<{
       const selector = `[${AttributeNames.file}="${sourceInfo.fileName}"][${AttributeNames.line}="${sourceInfo.lineNumber}"][${AttributeNames.column}="${sourceInfo.columnNumber}"]`;
       return document.querySelector(selector) as HTMLElement;
     },
-    []
+    [],
   );
 
   /**
@@ -655,66 +661,61 @@ export const DesignModeProvider: React.FC<{
 
       // 发送选择信息到父窗口（仅在iframe环境下）
       if (element && config.iframeMode?.enabled) {
-        const sourceInfoStr = element.getAttribute(AttributeNames.info);
-        if (sourceInfoStr) {
-          try {
-            const sourceInfo = JSON.parse(sourceInfoStr);
+        const sourceInfo = extractSourceInfo(element);
+        if (sourceInfo) {
+          // 判断是否为静态文本：
+          // 1. 检查元素是否有 static-content 属性
+          // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
+          const hasStaticContentAttr = element.hasAttribute(
+            AttributeNames.staticContent,
+          );
+          const isActuallyPureText = isPureStaticText(element);
+          const isStaticText = hasStaticContentAttr && isActuallyPureText;
 
-            // 判断是否为静态文本：
-            // 1. 检查元素是否有 static-content 属性
-            // 2. 严格验证元素是否真的只包含纯文本节点（不包含其他元素标签）
-            const hasStaticContentAttr = element.hasAttribute(AttributeNames.staticContent);
-            const isActuallyPureText = isPureStaticText(element);
-            const isStaticText = hasStaticContentAttr && isActuallyPureText;
-
-            // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
-            let textContent = '';
-            if (isStaticText) {
-              // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
-              textContent = element.textContent || element.innerText || '';
-            } else {
-              // 对于非静态文本，也返回内容（可能为空）
-              textContent = element.innerText || element.textContent || '';
-            }
-
-            const elementInfo: ElementInfo = {
-              tagName: element.tagName.toLowerCase(),
-              className: element.className,
-              textContent: textContent,
-              sourceInfo,
-              isStaticText: isStaticText || false, // 默认为 false
-            };
-
-            sendToParent({
-              type: 'ELEMENT_SELECTED',
-              payload: { elementInfo },
-              timestamp: Date.now(),
-            });
-
-          } catch (e) {
-            console.warn('Failed to parse source info:', e);
+          // 获取文本内容：如果是静态文本，返回完整内容；否则也返回内容（用于显示）
+          let textContent = "";
+          if (isStaticText) {
+            // 对于静态文本，使用 textContent 获取所有文本（包括隐藏的）
+            textContent = element.textContent || element.innerText || "";
+          } else {
+            // 对于非静态文本，也返回内容（可能为空）
+            textContent = element.innerText || element.textContent || "";
           }
+
+          const elementInfo: ElementInfo = {
+            tagName: element.tagName.toLowerCase(),
+            className: element.className,
+            textContent: textContent,
+            sourceInfo,
+            isStaticText: isStaticText || false, // 默认为 false
+          };
+
+          sendToParent({
+            type: "ELEMENT_SELECTED",
+            payload: { elementInfo },
+            timestamp: Date.now(),
+          });
         } else {
           console.warn(
-            `[DesignMode] Element selected but missing ${AttributeNames.info} attribute:`,
-            element
+            `[DesignMode] Element selected but missing source mapping attribute (data-react-inspector or data-xagi-info):`,
+            element,
           );
         }
       } else if (!element && config.iframeMode?.enabled) {
         sendToParent({
-          type: 'ELEMENT_DESELECTED',
+          type: "ELEMENT_DESELECTED",
           timestamp: Date.now(),
         });
       }
     },
-    [config.iframeMode?.enabled]
+    [config.iframeMode?.enabled],
   );
 
   /**
    * 切换设计模式
    */
   const toggleDesignMode = useCallback(() => {
-    setIsDesignMode(prev => {
+    setIsDesignMode((prev) => {
       const next = !prev;
       if (!next) {
         setSelectedElement(null);
@@ -730,19 +731,19 @@ export const DesignModeProvider: React.FC<{
     async (
       element: HTMLElement,
       newValue: string,
-      type: 'style' | 'content',
-      originalValue?: string
+      type: "style" | "content",
+      originalValue?: string,
     ) => {
       const sourceInfo = extractSourceInfo(element);
       if (!sourceInfo) {
-        throw new Error('Element does not have source mapping data');
+        throw new Error("Element does not have source mapping data");
       }
 
       try {
-        const response = await fetch('/__appdev_design_mode/update', {
-          method: 'POST',
+        const response = await fetch("/__appdev_design_mode/update", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             filePath: sourceInfo.fileName,
@@ -755,15 +756,14 @@ export const DesignModeProvider: React.FC<{
         });
 
         if (!response.ok) {
-          throw new Error('Failed to update source');
+          throw new Error("Failed to update source");
         }
-
       } catch (error) {
-        console.error('[DesignMode] Error updating source:', error);
+        console.error("[DesignMode] Error updating source:", error);
         throw error;
       }
     },
-    []
+    [],
   );
 
   /**
@@ -801,7 +801,7 @@ export const DesignModeProvider: React.FC<{
 
       return null;
     },
-    []
+    [],
   );
 
   /**
@@ -816,26 +816,26 @@ export const DesignModeProvider: React.FC<{
       element.className = mergedClasses;
 
       // 更新源码
-      await updateSource(element, mergedClasses, 'style', oldClasses);
+      await updateSource(element, mergedClasses, "style", oldClasses);
 
       // 添加到修改历史
       const modification: Modification = {
         id: Date.now().toString(),
-        element: element.id || 'unknown',
-        type: 'class',
+        element: element.id || "unknown",
+        type: "class",
         oldValue: oldClasses,
         newValue: mergedClasses,
         timestamp: Date.now(),
       };
 
-      setModifications(prev => [modification, ...prev]);
+      setModifications((prev) => [modification, ...prev]);
 
       // 如果在iframe中，发送更新消息
       if (config.iframeMode?.enabled) {
         const sourceInfo = extractSourceInfo(element);
         if (sourceInfo) {
           sendToParent({
-            type: 'STYLE_UPDATED',
+            type: "STYLE_UPDATED",
             payload: {
               sourceInfo,
               oldClass: oldClasses,
@@ -846,7 +846,7 @@ export const DesignModeProvider: React.FC<{
         }
       }
     },
-    [updateSource, config.iframeMode?.enabled]
+    [updateSource, config.iframeMode?.enabled],
   );
 
   /**
@@ -857,19 +857,18 @@ export const DesignModeProvider: React.FC<{
       const sourceInfo = extractSourceInfo(element);
       const originalContent = element.innerText;
 
-
       // 更新DOM
       element.innerText = newContent;
 
       // 更新源码
-      await updateSource(element, newContent, 'content', originalContent);
+      await updateSource(element, newContent, "content", originalContent);
 
       // 如果在iframe中，发送更新消息
       if (config.iframeMode?.enabled) {
         const sourceInfo = extractSourceInfo(element);
         if (sourceInfo) {
           sendToParent({
-            type: 'CONTENT_UPDATED',
+            type: "CONTENT_UPDATED",
             payload: {
               sourceInfo,
               oldValue: originalContent,
@@ -880,7 +879,7 @@ export const DesignModeProvider: React.FC<{
         }
       }
     },
-    [updateSource, config.iframeMode?.enabled]
+    [updateSource, config.iframeMode?.enabled],
   );
 
   /**
@@ -890,21 +889,21 @@ export const DesignModeProvider: React.FC<{
     async (
       updates: Array<{
         element: HTMLElement;
-        type: 'style' | 'content';
+        type: "style" | "content";
         newValue: string;
         originalValue?: string;
-      }>
+      }>,
     ) => {
       if (!config.batchUpdate?.enabled) {
         // 如果批量更新未启用，逐个处理
         await Promise.all(
-          updates.map(update => {
-            if (update.type === 'style') {
+          updates.map((update) => {
+            if (update.type === "style") {
               return modifyElementClass(update.element, update.newValue);
             } else {
               return updateElementContent(update.element, update.newValue);
             }
-          })
+          }),
         );
         return;
       }
@@ -922,10 +921,10 @@ export const DesignModeProvider: React.FC<{
       const timer = setTimeout(async () => {
         try {
           // 构建批量更新请求
-          const batchUpdateItems = newUpdates.map(update => {
+          const batchUpdateItems = newUpdates.map((update) => {
             const sourceInfo = extractSourceInfo(update.element);
             if (!sourceInfo) {
-              throw new Error('Element missing source mapping');
+              throw new Error("Element missing source mapping");
             }
 
             return {
@@ -939,15 +938,15 @@ export const DesignModeProvider: React.FC<{
           // 如果在iframe环境中，发送批量更新请求到父窗口
           if (config.iframeMode?.enabled) {
             await bridge.send({
-              type: 'BATCH_UPDATE',
+              type: "BATCH_UPDATE",
               payload: { updates: batchUpdateItems },
               timestamp: Date.now(),
             });
           } else {
             // 在主窗口中，直接调用API
-            await fetch('/__appdev_design_mode/batch-update', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+            await fetch("/__appdev_design_mode/batch-update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 updates: batchUpdateItems,
               }),
@@ -957,7 +956,7 @@ export const DesignModeProvider: React.FC<{
           // 清理批量更新队列
           setPendingBatchUpdates([]);
         } catch (error) {
-          console.error('[DesignMode] Batch update failed:', error);
+          console.error("[DesignMode] Batch update failed:", error);
           setPendingBatchUpdates([]);
           throw error;
         }
@@ -972,7 +971,7 @@ export const DesignModeProvider: React.FC<{
       config.iframeMode?.enabled,
       modifyElementClass,
       updateElementContent,
-    ]
+    ],
   );
 
   /**
@@ -991,7 +990,7 @@ export const DesignModeProvider: React.FC<{
         await bridge.send(message);
       }
     },
-    [config.iframeMode?.enabled]
+    [config.iframeMode?.enabled],
   );
 
   /**
@@ -1000,14 +999,14 @@ export const DesignModeProvider: React.FC<{
   const sendMessageWithResponse = useCallback(
     async <T extends DesignModeMessage, R extends DesignModeMessage>(
       message: T,
-      responseType: R['type']
+      responseType: R["type"],
     ): Promise<R> => {
       if (config.iframeMode?.enabled) {
         return await bridge.sendWithResponse(message, responseType);
       }
-      throw new Error('Iframe mode is not enabled');
+      throw new Error("Iframe mode is not enabled");
     },
-    [config.iframeMode?.enabled]
+    [config.iframeMode?.enabled],
   );
 
   /**
@@ -1017,7 +1016,7 @@ export const DesignModeProvider: React.FC<{
     if (config.iframeMode?.enabled) {
       return await bridge.healthCheck();
     }
-    return { status: 'healthy', details: { mode: 'standalone' } };
+    return { status: "healthy", details: { mode: "standalone" } };
   }, [config.iframeMode?.enabled]);
 
   return (
@@ -1055,7 +1054,7 @@ export const DesignModeProvider: React.FC<{
 export const useDesignMode = () => {
   const context = useContext(DesignModeContext);
   if (context === undefined) {
-    throw new Error('useDesignMode must be used within a DesignModeProvider');
+    throw new Error("useDesignMode must be used within a DesignModeProvider");
   }
   return context;
 };

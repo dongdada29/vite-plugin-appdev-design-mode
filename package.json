@@ -48,7 +48,8 @@
     "@babel/standalone": "^7.23.0",
     "@babel/traverse": "^7.24.0",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "vite-plugin-react-inspector": "^0.3.3"
   },
   "devDependencies": {
     "@types/babel__core": "^7.20.0",
