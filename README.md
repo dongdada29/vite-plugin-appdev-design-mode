@@ -4,11 +4,15 @@
 
 ## 特性
 
-- **源码映射**: 在编译时自动向DOM元素注入源码位置信息
+- **源码映射**: 在编译时自动向DOM元素注入源码位置信息（使用紧凑的 `data-xagi-info` JSON 属性）
 - **可视化编辑**: 提供直观的设计模式UI，支持实时样式编辑
+- **双击编辑**: 双击静态文本元素即可进入编辑模式，实时预览并自动保存到源码
+- **静态内容检测**: 智能识别纯静态文本（无变量、表达式或子元素），只有静态内容才能直接编辑
+- **列表项同步**: 编辑列表项时自动同步所有相关实例（内容或样式）
+- **组件识别**: 识别组件名称、导入路径，区分组件使用位置和定义位置
 - **实时修改**: 支持实时编辑样式和内容，并自动持久化到源码文件
 - **Tailwind CSS集成**: 内置Tailwind CSS预设，提供快速样式编辑
-- **桥接通信**: 提供消息桥接机制，支持与外部工具和设计系统集成
+- **桥接通信**: 提供消息桥接机制，支持与外部工具和设计系统集成（支持 iframe 模式）
 - **开发服务器集成**: 无缝集成Vite开发服务器，支持热重载
 - **零配置**: 开箱即用，无需复杂配置即可开始使用
 
@@ -131,12 +135,23 @@ export default defineConfig({
 
 1. **编译时转换**: 插件在编译时使用Babel AST转换JSX/TSX/JS文件
 2. **抽象语法树分析**: 分析AST识别React组件和DOM元素
-3. **源码映射数据注入**: 将源码位置信息作为`data-*`属性（默认前缀 `data-xagi`）注入到DOM元素
+   - 追踪 ImportDeclaration 以解析组件定义和导入路径
+   - 静态分析确定内容是否为纯静态文本（`isStaticContent`）
+   - 识别 UI 组件（components/ui 目录下的组件）
+3. **源码映射数据注入**: 将源码位置信息作为紧凑的`data-*`属性（默认前缀 `data-xagi`）注入到DOM元素
+   - 主要信息存储在 `data-xagi-info` JSON 属性中（减少 DOM 体积）
+   - 添加 `data-xagi-element-id` 用于唯一标识和列表项同步
+   - 添加 `data-xagi-static-content` 标记可编辑的静态内容
 4. **虚拟模块加载**: 通过Vite虚拟模块机制动态加载客户端代码
 5. **运行时通信**: 设计模式UI通过桥接系统与外部工具通信，支持实时编辑
+   - 支持 iframe 模式，通过 `postMessage` 与父窗口通信
+   - 支持元素选择、样式更新、内容更新等消息类型
 6. **源码持久化**: 修改的样式和内容通过API端点实时写入源码文件
-7. **批量更新**: 支持批量更新多个元素，通过防抖机制优化性能
-8. **备份与历史**: 可选启用备份和历史记录功能，支持撤销操作
+   - 使用智能文本替换算法，基于行/列信息安全修改源码
+   - 支持样式（className）、内容（innerText）、属性更新
+7. **列表项同步**: 使用 `element-id` 识别相关列表项，编辑一个实例自动同步到所有实例
+8. **批量更新**: 支持批量更新多个元素，通过防抖机制优化性能
+9. **备份与历史**: 可选启用备份和历史记录功能，支持撤销操作
 
 ## API 端点
 
@@ -164,22 +179,36 @@ export default defineConfig({
 
 插件处理的元素将具有以下属性（默认前缀为 `data-xagi`，可通过 `attributePrefix` 配置项自定义）：
 
-- `{prefix}-file`: 源码文件路径
-- `{prefix}-line`: 源码行号
-- `{prefix}-column`: 源码列号
-- `{prefix}-info`: 包含完整源码映射信息的JSON字符串
-- `{prefix}-element-id`: 唯一元素标识符，格式为`文件路径:行号:列号_标签名_类名或ID`
-- `{prefix}-component`: 组件名称（如果适用）
-- `{prefix}-function`: 函数名称（如果适用）
-- `{prefix}-position`: 位置信息，格式为`行号:列号`
-- `{prefix}-static-content`: 标记元素是否包含纯静态内容（值为 `'true'`），用于判断元素是否可以直接编辑
-- `{prefix}-static-class`: 标记 className 是否为纯静态字符串（值为 `'true'`）
-- `{prefix}-children-source`: 子元素的源码位置信息
-- `{prefix}-context-menu`: 上下文菜单相关属性
-- `{prefix}-context-menu-hover`: 上下文菜单悬停状态
-- `{prefix}-import`: 导入信息
+### 核心属性（实际注入）
 
-**注意**：这些属性使用可配置的前缀，默认值为 `data-xagi`。通过设置 `attributePrefix` 选项，可以避免与用户自定义的 `data-*` 属性冲突。例如，设置 `attributePrefix: 'data-appdev'` 后，属性名将变为 `data-appdev-file`、`data-appdev-line`、`data-appdev-static-content` 等。
+- **`{prefix}-info`**: 包含完整源码映射信息的 JSON 字符串，包含以下字段：
+  - `fileName`: 源码文件路径
+  - `lineNumber`: 源码行号
+  - `columnNumber`: 源码列号
+  - `elementType`: 元素类型（标签名）
+  - `componentName`: 组件名称（如果适用）
+  - `functionName`: 函数名称（如果适用）
+  - `elementId`: 唯一元素标识符
+  - `importPath`: 组件导入路径（用于区分组件使用位置和定义位置）
+  - `isUIComponent`: 是否是 UI 组件（components/ui 目录下的组件）
+
+- **`{prefix}-element-id`**: 唯一元素标识符，格式为 `文件路径:行号:列号_标签名#ID`（如果有 id 属性）或 `文件路径:行号:列号_标签名`（如果没有 id 属性）。用于列表项同步和元素识别。
+
+- **`{prefix}-position`**: 位置信息，格式为 `行号:列号`（简化版位置信息）
+
+- **`{prefix}-static-content`**: 标记元素是否包含纯静态内容（值为 `'true'`），用于判断元素是否可以直接编辑。只有包含纯静态文本（无变量、表达式或子元素）的元素才会被标记。
+
+- **`{prefix}-static-class`**: 标记 className 是否为纯静态字符串（值为 `'true'`），用于判断样式是否可以直接编辑。
+
+- **`{prefix}-children-source`**: 子元素的源码位置信息，格式为 `文件路径:行号:列号`（用于透传组件追踪静态文本子元素的来源位置）
+
+### 优化说明
+
+为了减少 DOM 体积，插件采用了紧凑的属性策略：
+- **所有主要信息都包含在 `{prefix}-info` 中**，不再单独注入 `{prefix}-file`、`{prefix}-line`、`{prefix}-column`、`{prefix}-component`、`{prefix}-function`、`{prefix}-import` 等属性
+- 这些信息可以通过解析 `{prefix}-info` JSON 字符串获取
+
+**注意**：这些属性使用可配置的前缀，默认值为 `data-xagi`。通过设置 `attributePrefix` 选项，可以避免与用户自定义的 `data-*` 属性冲突。例如，设置 `attributePrefix: 'data-appdev'` 后，属性名将变为 `data-appdev-info`、`data-appdev-element-id`、`data-appdev-static-content` 等。
 
 ## 浏览器集成
 
@@ -202,9 +231,20 @@ console.log(sourceData);
 //   columnNumber: 5,
 //   elementType: 'div',
 //   componentName: 'App',
-//   elementId: 'src/App.tsx:10:5_div_my-class',
-//   attributePrefix: 'data-xagi'
+//   functionName: 'App',
+//   elementId: 'src/App.tsx:10:5_div',
+//   importPath: undefined,  // 如果是组件，会显示导入路径
+//   isUIComponent: false     // 是否是 UI 组件
 // }
+
+// 检查元素是否可以直接编辑（静态内容）
+const isEditable = element.getAttribute(`${prefix}-static-content`) === 'true';
+if (isEditable) {
+  // 双击元素即可编辑
+  element.addEventListener('dblclick', () => {
+    element.contentEditable = 'true';
+  });
+}
 ```
 
 ### 桥接通信
@@ -342,6 +382,13 @@ export default defineConfig({
 2. 在右侧编辑面板中选择预设样式
 3. 实时预览样式效果
 4. 修改会自动保存到源码文件
+5. 对于列表项，修改一个实例会自动同步到所有相关实例
+
+### 编辑元素内容
+1. **双击**包含静态文本的元素（只有标记了 `data-xagi-static-content="true"` 的元素才能编辑）
+2. 进入 `contentEditable` 模式，直接编辑文本
+3. 失去焦点时自动保存到源码文件
+4. 对于列表项，编辑一个实例会自动同步到所有相关实例
 
 ### 重置修改
 - 点击“重置所有修改”按钮撤销所有更改
