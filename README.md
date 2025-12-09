@@ -98,8 +98,11 @@ export default defineConfig({
 - `enabled: true` - 启用插件
 - `enableInProduction: false` - 仅在开发环境生效，生产构建时自动禁用
 - `verbose: true` - 启用详细日志
-- `include: ['src/**/*.{ts,tsx}']` - 处理 src 目录下的 TypeScript/TSX 文件
-- `exclude: ['node_modules', 'dist', 'src/components/ui']` - 排除指定目录
+- `attributePrefix: 'data-xagi'` - 源码映射属性的前缀
+- `include: ['src/**/*.{ts,js,tsx,jsx}']` - 处理 src 目录下的 TypeScript/JavaScript/TSX/JSX 文件
+- `exclude: ['node_modules', 'dist']` - 排除指定目录
+- `enableBackup: false` - 是否启用备份功能
+- `enableHistory: false` - 是否启用历史记录功能
 
 ## Advanced Usage
 
@@ -126,24 +129,40 @@ export default defineConfig({
 
 ## 工作原理
 
-1. **编译时转换**: 插件在编译时使用Babel AST转换JSX/TSX文件
+1. **编译时转换**: 插件在编译时使用Babel AST转换JSX/TSX/JS文件
 2. **抽象语法树分析**: 分析AST识别React组件和DOM元素
-3. **源码映射数据注入**: 将源码位置信息作为`data-*`属性注入到DOM元素
-4. **运行时通信**: 设计模式UI通过桥接系统与外部工具通信，支持实时编辑
-5. **源码持久化**: 修改的样式和内容通过API端点实时写入源码文件
+3. **源码映射数据注入**: 将源码位置信息作为`data-*`属性（默认前缀 `data-xagi`）注入到DOM元素
+4. **虚拟模块加载**: 通过Vite虚拟模块机制动态加载客户端代码
+5. **运行时通信**: 设计模式UI通过桥接系统与外部工具通信，支持实时编辑
+6. **源码持久化**: 修改的样式和内容通过API端点实时写入源码文件
+7. **批量更新**: 支持批量更新多个元素，通过防抖机制优化性能
+8. **备份与历史**: 可选启用备份和历史记录功能，支持撤销操作
 
 ## API 端点
 
 插件提供以下API端点：
 
-- `GET /__appdev_design_mode/get-source?elementId=xxx` - 获取指定元素的源码信息和文件内容
-- `POST /__appdev_design_mode/modify-source` - 修改源码文件中的样式或内容
+### 基础端点
+- `GET /__appdev_design_mode/get-source?elementId=xxx` - 获取指定元素的源码信息和文件内容（增强版，包含更多元数据）
+- `POST /__appdev_design_mode/modify-source` - 修改源码文件中的样式或内容（兼容旧版本）
+- `POST /__appdev_design_mode/update` - 统一更新接口，支持样式、内容、属性更新
 - `GET /__appdev_design_mode/health` - 健康检查，返回插件运行状态
-- `POST /__appdev_design_mode/update` - 更新源码，支持样式类和内容修改
+
+### 批量操作端点
+- `POST /__appdev_design_mode/batch-update` - 批量更新多个元素的源码（需要 `enableHistory: true` 以保存会话）
+- `GET /__appdev_design_mode/batch-update-status?batchId=xxx` - 查询批量更新会话状态（需要 `enableHistory: true`）
+
+### 历史记录端点（需要 `enableHistory: true`）
+- `GET /__appdev_design_mode/get-history` - 获取更新历史记录
+- `POST /__appdev_design_mode/undo` - 撤销操作（需要 `enableBackup: true`）
+- `POST /__appdev_design_mode/redo` - 重做操作（暂未实现）
+
+### 验证端点
+- `POST /__appdev_design_mode/validate-update` - 验证更新请求的有效性
 
 ## 生成属性
 
-插件处理的元素将具有以下属性（默认前缀为 `data-source`，可通过 `attributePrefix` 配置项自定义）：
+插件处理的元素将具有以下属性（默认前缀为 `data-xagi`，可通过 `attributePrefix` 配置项自定义）：
 
 - `{prefix}-file`: 源码文件路径
 - `{prefix}-line`: 源码行号
@@ -154,8 +173,13 @@ export default defineConfig({
 - `{prefix}-function`: 函数名称（如果适用）
 - `{prefix}-position`: 位置信息，格式为`行号:列号`
 - `{prefix}-static-content`: 标记元素是否包含纯静态内容（值为 `'true'`），用于判断元素是否可以直接编辑
+- `{prefix}-static-class`: 标记 className 是否为纯静态字符串（值为 `'true'`）
+- `{prefix}-children-source`: 子元素的源码位置信息
+- `{prefix}-context-menu`: 上下文菜单相关属性
+- `{prefix}-context-menu-hover`: 上下文菜单悬停状态
+- `{prefix}-import`: 导入信息
 
-**注意**：这些属性使用可配置的前缀，默认值为 `data-source`。通过设置 `attributePrefix` 选项，可以避免与用户自定义的 `data-*` 属性冲突。例如，设置 `attributePrefix: 'data-appdev'` 后，属性名将变为 `data-appdev-file`、`data-appdev-line`、`data-appdev-static-content` 等。
+**注意**：这些属性使用可配置的前缀，默认值为 `data-xagi`。通过设置 `attributePrefix` 选项，可以避免与用户自定义的 `data-*` 属性冲突。例如，设置 `attributePrefix: 'data-appdev'` 后，属性名将变为 `data-appdev-file`、`data-appdev-line`、`data-appdev-static-content` 等。
 
 ## 浏览器集成
 
@@ -164,9 +188,11 @@ export default defineConfig({
 在浏览器开发者工具或外部应用中：
 
 ```javascript
-// 获取元素源码信息
+// 获取元素源码信息（注意：默认前缀已改为 data-xagi）
 const element = document.querySelector('.my-element');
-const sourceInfo = element.getAttribute('data-source-info');
+// 从全局配置获取前缀，或使用默认值 'data-xagi'
+const prefix = window.__APPDEV_DESIGN_MODE_CONFIG__?.attributePrefix || 'data-xagi';
+const sourceInfo = element.getAttribute(`${prefix}-info`);
 const sourceData = JSON.parse(sourceInfo);
 
 console.log(sourceData);
@@ -176,7 +202,8 @@ console.log(sourceData);
 //   columnNumber: 5,
 //   elementType: 'div',
 //   componentName: 'App',
-//   elementId: 'src/App.tsx:10:5_div_my-class'
+//   elementId: 'src/App.tsx:10:5_div_my-class',
+//   attributePrefix: 'data-xagi'
 // }
 ```
 
@@ -218,10 +245,12 @@ window.parent.postMessage({
 |------|------|--------|------|
 | `enabled` | boolean | `true` | 是否启用设计模式插件 |
 | `enableInProduction` | boolean | `false` | 是否在生产环境启用，通常保持false |
-| `attributePrefix` | string | `'data-source'` | 自定义源码映射属性的前缀 |
+| `attributePrefix` | string | `'data-xagi'` | 自定义源码映射属性的前缀 |
 | `verbose` | boolean | `true` | 是否启用详细日志输出，便于调试 |
-| `exclude` | string[] | `['node_modules', 'dist', 'src/components/ui']` | 排除处理的文件模式和目录 |
-| `include` | string[] | `['src/**/*.{ts,tsx}']` | 包含处理的文件模式，支持glob语法 |
+| `exclude` | string[] | `['node_modules', 'dist']` | 排除处理的文件模式和目录 |
+| `include` | string[] | `['src/**/*.{ts,js,tsx,jsx}']` | 包含处理的文件模式，支持glob语法 |
+| `enableBackup` | boolean | `false` | 是否启用备份功能，启用后会在修改源码前创建备份文件 |
+| `enableHistory` | boolean | `false` | 是否启用历史记录功能，启用后会保存批量更新会话和历史记录 |
 
 ### 配置示例
 
@@ -236,7 +265,9 @@ export default defineConfig({
       attributePrefix: 'data-appdev',
       verbose: true,
       exclude: ['node_modules', '.git', 'dist'],
-      include: ['src/**/*.{ts,tsx}', 'pages/**/*.{ts,tsx}']
+      include: ['src/**/*.{ts,js,tsx,jsx}', 'pages/**/*.{ts,js,tsx,jsx}'],
+      enableBackup: true,  // 启用备份功能
+      enableHistory: true   // 启用历史记录功能
     })
   ]
 });
@@ -315,6 +346,8 @@ export default defineConfig({
 ### 重置修改
 - 点击“重置所有修改”按钮撤销所有更改
 - 页面将重新加载并恢复原始状态
+- 如果启用了备份功能（`enableBackup: true`），可以使用撤销功能恢复之前的版本
+- 如果启用了历史记录功能（`enableHistory: true`），可以查看和恢复历史更新会话
 
 ## 故障排除
 
@@ -394,6 +427,18 @@ const CUSTOM_PRESETS = {
 - 更新相关文档
 
 ## 更新日志
+
+### v1.0.36
+- 更新默认属性前缀为 `data-xagi`
+- 新增批量更新功能（`/batch-update` 端点）
+- 新增历史记录功能（`enableHistory` 配置项）
+- 新增备份功能（`enableBackup` 配置项）
+- 新增撤销/重做功能（需要启用备份和历史记录）
+- 增强 `/get-source` 端点，返回更多元数据
+- 新增 `/validate-update` 端点用于验证更新请求
+- 支持 TypeScript/JavaScript/TSX/JSX 文件处理
+- 优化默认文件包含模式，支持更多文件类型
+- 改进CLI工具，支持一键安装和卸载
 
 ### v1.0.0
 - 初始版本发布
